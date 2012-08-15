@@ -1,0 +1,3 @@
+MATLAB program for loading and processing data of Delay Line readouts aquired by a WavePro 7100 oscilloscope.
+
+See the comments in the .mat-file for further information of its use.
