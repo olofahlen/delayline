@@ -10,53 +10,65 @@ clc
 
 %% Settings
 plotFourierTransform = 1;
+importSavedData = 1;
+saveData = 1;
 
 %% Load data
 
-path = '/home/thorleif/mcp/tests/lotsofmeas/';
-%path = '/home/thorleif/mcp/tests/gooddata/';
-channels = 4;
-
-C1files = dir([path 'C1*.dat']);
-nbrOfFiles = length(C1files);
-
-dummyData = importdata([path C1files(1).name]);
-measPerFile = length(dummyData);
-nbrOfMeas = length(C1files);
-%nbrOfMeas = 1000;
-
-%This will contain all the measurements. The four channels will be on top
-%of each other
-data = zeros(measPerFile*4, nbrOfMeas);
-
-i = 1;
-if nbrOfMeas > 100
-    modCheck = floor(nbrOfMeas/100);
+if importSavedData
+    disp('Loading saved data...')
+    load mcpData
 else
-    modCheck = 1;
-end
+    path = '/home/thorleif/mcp/tests/lotsofmeas/';
+    %path = '/home/thorleif/mcp/tests/gooddata/';
+    channels = 4;
 
-disp('Loading files...')
-%for measFile = C1files'
-for i = 1:nbrOfMeas
-    measFile = C1files(i);
-    fileName = measFile.name;
-    for j = 1:channels
-        fp = [path 'C' int2str(j) fileName(3:end)];
-        importedData = importdata(fp);
-        data((1:measPerFile) + (measPerFile * (j - 1)), i) = importedData(:, 2);
+    C1files = dir([path 'C1*.dat']);
+    nbrOfFiles = length(C1files);
+
+    dummyData = importdata([path C1files(1).name]);
+    measPerFile = length(dummyData);
+    nbrOfMeas = length(C1files);
+    %nbrOfMeas = 1000;
+
+    %This will contain all the measurements. The four channels will be on top
+    %of each other
+    data = zeros(measPerFile*channels, nbrOfMeas);
+
+    i = 1;
+    if nbrOfMeas > 100
+        modCheck = floor(nbrOfMeas/100);
+    else
+        modCheck = 1;
     end
-    if mod(i, modCheck) == 0
-        percentProgress = ceil(i/nbrOfMeas*100);
-        disp([num2str(percentProgress) '% done'])
+
+    disp(['Loading ' num2str(nbrOfMeas*channels) ' files...'])
+    %for measFile = C1files'
+    for i = 1:nbrOfMeas
+        measFile = C1files(i);
+        fileName = measFile.name;
+        for j = 1:channels
+            fp = [path 'C' int2str(j) fileName(3:end)];
+            importedData = importdata(fp);
+            data((1:measPerFile) + (measPerFile * (j - 1)), i) = importedData(:, 2);
+        end
+        if mod(i, modCheck) == 0
+            percentProgress = ceil(i/nbrOfMeas*100);
+            disp([num2str(percentProgress) '% done'])
+        end
+        %i = i + 1;
     end
-    %i = i + 1;
+    if saveData
+        save mcpData
+    end
 end
 
 %% Post Loading
 
 channelPairs = [1 2 3 4]; %Real
 freqCut = 0.2e9;
+
+inputImpedance = 50; %Impedance of the oscilloscope in Ohms
 
 T = dummyData(:, 1); %Time vector
 t = T(2) - T(1); %Sampling time
@@ -209,6 +221,37 @@ for i = 1:nbrOfMeas
     end
 end
 
+%% Calculate charge
+
+%FIXME: Units seem not to be right. Expecting something like 1e7 elementary
+%charges per event
+
+figure(30)
+clf(30)
+bins = 20;
+disp('Calculating total charge...')
+ePerCoulomb = 1.602e19;
+charge = zeros(channels, nbrOfMeas);
+for j = 1:channels
+    meas = data((1:measPerFile) + (measPerFile * (channelPairs(j) - 1)), :);
+    charge(j, :) = trapz(meas(:, :), 1)*t / inputImpedance;
+end
+for j = 1:channels
+    subplot(4, 1, j)
+    hist(charge(j, :)*ePerCoulomb, bins)
+end
+
+figure(31)
+clf(31)
+totalCharge = zeros(channels/2, nbrOfMeas);
+totalCharge(1, :) = charge(channelPairs(1), :) + charge(channelPairs(2), :);
+totalCharge(2, :) = charge(channelPairs(3), :) + charge(channelPairs(4), :);
+for k = 1:2
+    subplot(2, 1, k)
+    hist(totalCharge(k, :)*ePerCoulomb, bins)
+end
+
+
 %% Locate peaks
 
 disp('Locating peaks...')
@@ -231,9 +274,12 @@ figure(1)
 clf(1)
 hold on
 colors = ['r', 'g', 'b', 'y'];
-for j = 1:channels
+pic = 1;
+
+for i = pic:pic + 10000
+    for j = 1:channels
     color = colors(j);
-    for i = 1:1
+        i
         meas = data((1:measPerFile) + (measPerFile * (channelPairs(j) - 1)), i);
         subplot(2, 1, ceil(j/2));
         hold on
@@ -241,6 +287,8 @@ for j = 1:channels
         plot(T, meas, color)
         plot(T(signalIndices(channelPairs(j), i)), meas(signalIndices(channelPairs(j), i)), 'o')
     end
+    pause
+    clf(1)
 end
 
 %% Calculate positions
