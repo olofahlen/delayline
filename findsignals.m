@@ -1,3 +1,5 @@
+%% Initial
+
 clear all
 clc
 
@@ -21,7 +23,7 @@ nbrOfFiles = length(C1files);
 dummyData = importdata([path C1files(1).name]);
 measPerFile = length(dummyData);
 nbrOfMeas = length(C1files);
-nbrOfMeas = 1000;
+%nbrOfMeas = 1000;
 
 %This will contain all the measurements. The four channels will be on top
 %of each other
@@ -54,7 +56,7 @@ end
 %% Post Loading
 
 channelPairs = [1 2 3 4]; %Real
-freqCut = 1e9;
+freqCut = 0.2e9;
 
 T = dummyData(:, 1); %Time vector
 t = T(2) - T(1); %Sampling time
@@ -64,46 +66,87 @@ f = Fs/2*linspace(0,1,L/2+1); %Frequency vector
 fCutLength = length(f) - find(f > freqCut, 1, 'first');
 fZeroMask = zeros(2*fCutLength, 1);
 
-%% Remove offsets
+riseTime = 1e-8;
+nRiseTime = floor(riseTime/t);
 
-disp('Removing offsets...')
-for j = 1:channels
-    offset = mean2(data((1:measPerFile) + (measPerFile * (j - 1)), 1:end/10));
-    data((1:measPerFile) + (measPerFile * (j - 1)), :) = data((1:measPerFile) + (measPerFile * (j - 1)), :) - offset;
-end
+%% New Remove Offsets and filter out bad measurements
 
-%% Filter out bad measurements -- UNDER CONSTRUCTION!
+disp('Removing offsets and finding bad signals...')
+figure(22)
+clf(22)
 
-bad = zeros(nbrOfMeas, 1);
-
-meas = data(1:measPerFile, 46)
-%meas = meas - mean(meas)
-nicestd = std(meas)
-limit = nicestd;
-figure(21)
-clf(21)
-plot(T, meas)
-hold on
-%line([T(1); T(2)], [nicestd; nicestd])
-line([T(1) T(end)], [limit limit])
-line([T(1) T(end)], [-limit -limit])
-
-
-
-%% Locate peaks
-
-disp('Locating peaks...')
-%signals = zeros(4, nbrOfMeas);
-signalIndices = zeros(4, nbrOfMeas);
-
+good = ones(nbrOfMeas, 1);
 for i = 1:nbrOfMeas
     for j = 1:channels
         meas = data((1:measPerFile) + (measPerFile * (j - 1)), i);
-        [minValue, minIndex] = min(meas);
-        %signals(j, i) = T(minIndex);
-        signalIndices(j, i) = minIndex;
+        [minVal minIndex] = min(meas);
+        potentialStart = minIndex - nRiseTime;
+        if potentialStart < measPerFile/15
+            good(i) = 0;
+        else
+            nicestd = std(meas(1:potentialStart));
+            nicemean = mean(meas(1:potentialStart));
+            upperlimit = 4*nicestd + nicemean;
+            lowerlimit = -4*nicestd + nicemean;
+            if length(find(meas < lowerlimit)) < nRiseTime/2
+                good(i) = 0;
+            end
+        end
+        if j == 1 && i < 21
+            subplot(2, 1, 1)
+            plot(T, meas)
+            hold on
+        end
+        %subplot(2, 1, 1)
+        %plot(T, meas)
+        %line([T(1); T(2)], [nicestd; nicestd])
+        %line([T(1) T(end)], [upperlimit upperlimit])
+        %line([T(1) T(end)], [lowerlimit lowerlimit])
+        %line([T(1) T(end)], [nicemean nicemean], 'Color', 'g')
+        meanCut = find(meas < lowerlimit, 1, 'first');
+        data((1:measPerFile) + (measPerFile * (j - 1)), i) = meas - mean(meas(1:meanCut));
+        %subplot(2, 1, 2)
+        %plot(T, meas)
+        %line([T(1) T(end)], [0 0])
+        if j == 1 && i == 1
+            subplot(2, 1, 2)
+            plot(T, meas)
+            hold on
+        end
+       
+%         if good(i)
+%             xlabel('Good signal')
+%         else
+%             xlabel('Bad signal')
+%         end
+
+        %pause
     end
 end
+
+disp('Removing bad signals...')
+nbrOfGoods = length(find(good == 1));
+goodData = zeros(measPerFile*4, nbrOfGoods);
+goodsExtracted = 0;
+for i = 1:nbrOfMeas
+    if good(i)
+        goodData(:, goodsExtracted + 1) = data(:, i);
+        goodsExtracted = goodsExtracted + 1;
+    end
+end
+
+nbrOfMeas = nbrOfGoods;
+data = goodData;
+    
+
+
+%% Old method to remove offsets
+
+% disp('Removing offsets...')
+% for j = 1:channels
+%     offset = mean2(data((1:measPerFile) + (measPerFile * (j - 1)), 1:end/10));
+%     data((1:measPerFile) + (measPerFile * (j - 1)), :) = data((1:measPerFile) + (measPerFile * (j - 1)), :) - offset;
+% end
 
 %% Clean signals from noise using the Fourier Transform
 
@@ -124,7 +167,7 @@ end
 loopCounter = 1;
 for i = 1:nbrOfMeas
     for j = 1:channels
-        if j == 2 && i == 418
+        if j == 1 && i == 46
             plotFourierTransform = 1;
         else
             plotFourierTransform = 0;
@@ -152,7 +195,7 @@ for i = 1:nbrOfMeas
         cleanedMeas = real(ifft(MEAS));
         
         if plotFourierTransform
-            plot(f, 2*abs(Y(1:L/2+1))) 
+            plot(f, 2*abs(MEAS(1:L/2+1))) 
             subplot(2, 2, 3)
             plot(T, cleanedMeas);
         end
@@ -166,15 +209,31 @@ for i = 1:nbrOfMeas
     end
 end
 
+%% Locate peaks
+
+disp('Locating peaks...')
+%signals = zeros(4, nbrOfMeas);
+signalIndices = zeros(4, nbrOfMeas);
+
+for i = 1:nbrOfMeas
+    for j = 1:channels
+        meas = data((1:measPerFile) + (measPerFile * (j - 1)), i);
+        [minValue, minIndex] = min(meas);
+        %signals(j, i) = T(minIndex);
+        signalIndices(j, i) = minIndex;
+    end
+end
+
 %% Plot signals
 
+disp('Plotting signals...')
 figure(1)
 clf(1)
 hold on
 colors = ['r', 'g', 'b', 'y'];
 for j = 1:channels
     color = colors(j);
-    for i = 10:10
+    for i = 1:1
         meas = data((1:measPerFile) + (measPerFile * (channelPairs(j) - 1)), i);
         subplot(2, 1, ceil(j/2));
         hold on
@@ -185,6 +244,8 @@ for j = 1:channels
 end
 
 %% Calculate positions
+
+disp('Calculating spatial coordinates...')
 channelPairs = [1 2 3 4];
 channelGroups = [channelPairs(1:2); channelPairs(3:4)];
 timeDiff = zeros(2, nbrOfMeas);
@@ -195,6 +256,7 @@ for i = 1:nbrOfMeas
     end
 end
 
+disp('Plotting results in histogram and x-y plot...')
 bins = 500;
 
 figure(2)
@@ -207,6 +269,7 @@ hist(timeDiff(2, :), bins)
 figure(4)
 clf(4)
 plot(timeDiff(1, :), timeDiff(2, :), '.')
+axis square
 
 %% Plot times
 %figure
