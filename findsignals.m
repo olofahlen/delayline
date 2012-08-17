@@ -9,9 +9,15 @@ clc
 % 'C1mcp00012.dat'.
 
 %% Settings
+plotOffSets = 1;
 plotFourierTransform = 1;
+plotCharges = 1;
+plotSignals = 1;
+plotPositions = 1;
 importSavedData = 1;
 saveData = 1;
+
+set(0,'DefaultFigureNumberTitle', 'off')
 
 %% Load data
 
@@ -66,6 +72,7 @@ end
 %% Post Loading
 
 channelPairs = [1 2 3 4]; %Real
+channelGroups = [channelPairs(1:2); channelPairs(3:4)];
 freqCut = 0.2e9;
 
 inputImpedance = 50; %Impedance of the oscilloscope in Ohms
@@ -81,11 +88,22 @@ fZeroMask = zeros(2*fCutLength, 1);
 riseTime = 1e-8;
 nRiseTime = floor(riseTime/t);
 
+%%
+
+disp('hej')
+
+%%
+
 %% New Remove Offsets and filter out bad measurements
 
 disp('Removing offsets and finding bad signals...')
-figure(22)
-clf(22)
+
+if plotOffSets
+    figure(22)
+    clf(22)
+    set(gcf, 'Name', 'Signal Offsets')
+    suptitle('Before and after removing the offset')
+end
 
 good = ones(nbrOfMeas, 1);
 for i = 1:nbrOfMeas
@@ -96,43 +114,44 @@ for i = 1:nbrOfMeas
         if potentialStart < measPerFile/15
             good(i) = 0;
         else
-            nicestd = std(meas(1:potentialStart));
-            nicemean = mean(meas(1:potentialStart));
-            upperlimit = 4*nicestd + nicemean;
-            lowerlimit = -4*nicestd + nicemean;
+            measStd = std(meas(1:potentialStart));
+            measMean = mean(meas(1:potentialStart));
+            upperlimit = 4*measStd + measMean;
+            lowerlimit = -4*measStd + measMean;
             if length(find(meas < lowerlimit)) < nRiseTime/2
                 good(i) = 0;
             end
         end
-        if j == 1 && i < 21
-            subplot(2, 1, 1)
-            plot(T, meas)
-            hold on
-        end
-        %subplot(2, 1, 1)
-        %plot(T, meas)
-        %line([T(1); T(2)], [nicestd; nicestd])
-        %line([T(1) T(end)], [upperlimit upperlimit])
-        %line([T(1) T(end)], [lowerlimit lowerlimit])
-        %line([T(1) T(end)], [nicemean nicemean], 'Color', 'g')
         meanCut = find(meas < lowerlimit, 1, 'first');
         data((1:measPerFile) + (measPerFile * (j - 1)), i) = meas - mean(meas(1:meanCut));
         %subplot(2, 1, 2)
         %plot(T, meas)
         %line([T(1) T(end)], [0 0])
-        if j == 1 && i == 1
+        
+        if plotOffSets && i == 1 && j == 1
+            subplot(2, 1, 1)
+            hold on
+            title('With offset')
+            xlabel('Time [s]')
+            ylabel('Voltage [V]')
+            plot(T, meas)
+            line([T(1); T(2)], [measStd; measStd])
+            line([T(1) T(end)], [upperlimit upperlimit])
+            line([T(1) T(end)], [lowerlimit lowerlimit])
+            line([T(1) T(end)], [measMean measMean], 'Color', 'g')
             subplot(2, 1, 2)
+            hold on
+            title('Without offset')
+            xlabel('Time [s]')
+            ylabel('Voltage [V]')
             plot(T, meas)
             hold on
+            if good(i)
+                disp('Good signal')
+            else
+                disp('Bad signal')
+            end
         end
-       
-%         if good(i)
-%             xlabel('Good signal')
-%         else
-%             xlabel('Bad signal')
-%         end
-
-        %pause
     end
 end
 
@@ -167,6 +186,8 @@ disp('Cleaning with Fourier Transform...')
 if plotFourierTransform
     figure(11)
     clf(11)
+    set(gcf, 'Name', 'Signal Fourier Transform')
+    suptitle(['Before and after frequency cut at ' num2str(freqCut, '%.2e')])
     hold on
 end
 
@@ -179,37 +200,40 @@ end
 loopCounter = 1;
 for i = 1:nbrOfMeas
     for j = 1:channels
-        if j == 1 && i == 46
-            plotFourierTransform = 1;
-        else
-            plotFourierTransform = 0;
-        end
         meas = data((1:measPerFile) + (measPerFile * (channelPairs(j) - 1)), i);
         MEAS = fft(meas)/L;
-        if plotFourierTransform
+        if plotFourierTransform && i == 1 && j == 1
             subplot(2, 2, 1)
-
-            hold off
-            plot(T, meas)
-
             hold on
-            plot(T(signalIndices(channelPairs(j), i)), meas(signalIndices(channelPairs(j), i)), 'o')
+            title('Before low pass')
+            xlabel('Time [s]')
+            ylabel('Voltage [V]')
+            plot(T, meas)
+            
             subplot(2, 2, 2)
-
-            plot(f, 2*abs(MEAS(1:L/2+1))) 
+            hold on
+            title('Uncut Fourier spectrum')
             xlabel('Frequency (Hz)')
-
-            subplot(2, 2, 4)
-            hold off
+            ylabel('Fourier transform [Vs]')
+            plot(f, 2*abs(MEAS(1:L/2+1))) 
         end
         
         MEAS(L/2 - fCutLength + 1:L/2 + fCutLength) = fZeroMask;
         cleanedMeas = real(ifft(MEAS));
         
-        if plotFourierTransform
-            plot(f, 2*abs(MEAS(1:L/2+1))) 
+        if plotFourierTransform && i == 1 && j == 1
             subplot(2, 2, 3)
+            hold on
+            title('After low pass')
+            xlabel('Time [s]')
+            ylabel('Voltage [V]')
             plot(T, cleanedMeas);
+            subplot(2, 2, 4)
+            hold on
+            title('Cut Fourier spectrum')
+            xlabel('Frequency (Hz)')
+            ylabel('Fourier transform [Vs]')
+            plot(f, 2*abs(MEAS(1:L/2+1))) 
         end
         
         data((1:measPerFile) + (measPerFile * (channelPairs(j) - 1)), i) = cleanedMeas;
@@ -224,11 +248,9 @@ end
 %% Calculate charge
 
 %FIXME: Units seem not to be right. Expecting something like 1e7 elementary
-%charges per event
+%charges per event. At least I hope so!!
 
-figure(30)
-clf(30)
-bins = 20;
+bins = 50;
 disp('Calculating total charge...')
 ePerCoulomb = 1.602e19;
 charge = zeros(channels, nbrOfMeas);
@@ -236,66 +258,80 @@ for j = 1:channels
     meas = data((1:measPerFile) + (measPerFile * (channelPairs(j) - 1)), :);
     charge(j, :) = trapz(meas(:, :), 1)*t / inputImpedance;
 end
-for j = 1:channels
-    subplot(4, 1, j)
-    hist(charge(j, :)*ePerCoulomb, bins)
-end
-
-figure(31)
-clf(31)
 totalCharge = zeros(channels/2, nbrOfMeas);
 totalCharge(1, :) = charge(channelPairs(1), :) + charge(channelPairs(2), :);
 totalCharge(2, :) = charge(channelPairs(3), :) + charge(channelPairs(4), :);
-for k = 1:2
-    subplot(2, 1, k)
-    hist(totalCharge(k, :)*ePerCoulomb, bins)
-end
 
+if plotCharges
+    figure(30)
+    clf(30)
+    set(gcf, 'Name', 'Individual charge histograms')
+    suptitle('Histograms of charges for the different channels')
+    for j = 1:channels
+        subplot(4, 1, j)
+        hold on
+        title(['Charge deposited on channel ' num2str(channelPairs(j))])
+        xlabel('Charge [e]')
+        ylabel('Counts')
+        hist(charge(j, :)*ePerCoulomb, bins)
+    end
+
+    figure(31)
+    clf(31)
+    set(gcf, 'Name', 'Total charge histograms')
+    suptitle('Histograms of total charge for the two delay lines')
+    for k = 1:2
+        subplot(2, 1, k)
+        hold on
+        title(['Total charge deposited on channels ' num2str(channelGroups(k, 1)) ' and ' num2str(channelGroups(k, 2))])
+        xlabel('Charge [e]')
+        ylabel('Counts')
+        hist(totalCharge(k, :)*ePerCoulomb, bins)
+    end
+end
 
 %% Locate peaks
 
 disp('Locating peaks...')
-%signals = zeros(4, nbrOfMeas);
 signalIndices = zeros(4, nbrOfMeas);
 
 for i = 1:nbrOfMeas
     for j = 1:channels
         meas = data((1:measPerFile) + (measPerFile * (j - 1)), i);
         [minValue, minIndex] = min(meas);
-        %signals(j, i) = T(minIndex);
         signalIndices(j, i) = minIndex;
     end
 end
 
 %% Plot signals
 
-disp('Plotting signals...')
-figure(1)
-clf(1)
-hold on
-colors = ['r', 'g', 'b', 'y'];
-pic = 1;
-
-for i = pic:pic + 10000
-    for j = 1:channels
-    color = colors(j);
-        i
-        meas = data((1:measPerFile) + (measPerFile * (channelPairs(j) - 1)), i);
-        subplot(2, 1, ceil(j/2));
-        hold on
-        %plot(T, data((1:measPerFile) + (measPerFile * (channelPairs(j) - 1)), i), color)
-        plot(T, meas, color)
-        plot(T(signalIndices(channelPairs(j), i)), meas(signalIndices(channelPairs(j), i)), 'o')
-    end
-    pause
+if plotSignals
+    disp('Plotting signals...')
+    figure(1)
     clf(1)
+    set(gcf, 'Name', 'Signal plots')
+    suptitle('Delay Line signals')
+    colors = ['r', 'g', 'b', 'y'];
+    pic = 1;
+    for i = 1:1
+        for j = 1:channels
+        color = colors(j);
+            meas = data((1:measPerFile) + (measPerFile * (channelPairs(j) - 1)), i);
+            subplot(2, 1, ceil(j/2));
+            hold on
+            title('Delay Line signals')
+            xlabel('Time [s]')
+            ylabel('Voltage [V]')
+            %plot(T, data((1:measPerFile) + (measPerFile * (channelPairs(j) - 1)), i), color)
+            plot(T, meas, color)
+            plot(T(signalIndices(channelPairs(j), i)), meas(signalIndices(channelPairs(j), i)), 'o')
+        end
+    end
 end
 
 %% Calculate positions
 
 disp('Calculating spatial coordinates...')
-channelPairs = [1 2 3 4];
-channelGroups = [channelPairs(1:2); channelPairs(3:4)];
 timeDiff = zeros(2, nbrOfMeas);
 
 for i = 1:nbrOfMeas
@@ -307,27 +343,35 @@ end
 disp('Plotting results in histogram and x-y plot...')
 bins = 500;
 
-figure(2)
-clf(2)
-subplot(2, 1, 1)
-hist(timeDiff(1, :), bins)
-subplot(2, 1, 2)
-hist(timeDiff(2, :), bins)
+if plotPositions
+    figure(2)
+    clf(2)
+    set(gcf, 'Name', 'Histograms of time differences')
+    suptitle('Histograms of time differences for the two delay lines')
+    subplot(2, 1, 1)
+    hold on
+    title(['Delayline for channels ' num2str(channelPairs(1)) ' and ' num2str(channelPairs(2))])
+    xlabel('$\Delta t$ [s]', 'Interpreter', 'LaTeX')
+    ylabel('Counts')
+    hist(timeDiff(1, :), bins)
+    subplot(2, 1, 2)
+    hold on
+    title(['Delayline for channels ' num2str(channelPairs(3)) ' and ' num2str(channelPairs(4))])
+    xlabel('$\Delta t$ [s]', 'Interpreter', 'LaTeX')
+    ylabel('Counts')
+    hist(timeDiff(2, :), bins)
 
-figure(4)
-clf(4)
-plot(timeDiff(1, :), timeDiff(2, :), '.')
-axis square
+    figure(4)
+    clf(4)
+    set(gcf, 'Name', 'MCP 2D-plot')
+    hold on
+    suptitle('Reconstruction of particle hits on the MCP')
+    plot(timeDiff(1, :), timeDiff(2, :), '.')
+    xlabel('$x\propto \Delta t_x$', 'Interpreter', 'LaTeX');
+    ylabel('$y\propto \Delta t_y$', 'Interpreter', 'LaTeX');
+    axis square
+end
 
 %% Plot times
 %figure
 %plot(timeDiff(1, :))
-
-%% Plot Histograms
-
-%figure(3)
-%clf(3)
-%subplot(2, 1, 1)
-%hist(timeDiff(1, :))
-%subplot(2, 1, 2)
-%hist(timeDiff(2, :))
