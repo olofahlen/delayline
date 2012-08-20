@@ -9,7 +9,7 @@ clc
 % 'C1mcp00012.dat'.
 
 %% Settings
-plotOffSets = 1;
+plotOffSets = 0;
 plotFourierTransform = 1;
 plotCharges = 1;
 plotSignals = 1;
@@ -17,7 +17,7 @@ plotPositions = 1;
 importSavedData = 1;
 saveData = 1;
 
-set(0,'DefaultFigureNumberTitle', 'off')
+%set(0,'DefaultFigureNumberTitle', 'off')
 
 %% Load data
 
@@ -61,6 +61,7 @@ else
         if mod(i, modCheck) == 0
             percentProgress = ceil(i/nbrOfMeas*100);
             disp([num2str(percentProgress) '% done'])
+            %fprintf(
         end
         %i = i + 1;
     end
@@ -88,12 +89,6 @@ fZeroMask = zeros(2*fCutLength, 1);
 riseTime = 1e-8;
 nRiseTime = floor(riseTime/t);
 
-%%
-
-disp('hej')
-
-%%
-
 %% New Remove Offsets and filter out bad measurements
 
 disp('Removing offsets and finding bad signals...')
@@ -105,13 +100,14 @@ if plotOffSets
     suptitle('Before and after removing the offset')
 end
 
+size(data)
 good = ones(nbrOfMeas, 1);
 for i = 1:nbrOfMeas
     for j = 1:channels
         meas = data((1:measPerFile) + (measPerFile * (j - 1)), i);
         [minVal minIndex] = min(meas);
         potentialStart = minIndex - nRiseTime;
-        if potentialStart < measPerFile/15
+        if potentialStart < measPerFile/15 || measPerFile - potentialStart < 2*nRiseTime + 1
             good(i) = 0;
         else
             measStd = std(meas(1:potentialStart));
@@ -128,9 +124,9 @@ for i = 1:nbrOfMeas
         %plot(T, meas)
         %line([T(1) T(end)], [0 0])
         
-        if plotOffSets && i == 1 && j == 1
+        if plotOffSets && i == 100 && j == 1
             subplot(2, 1, 1)
-            hold on
+            hold off
             title('With offset')
             xlabel('Time [s]')
             ylabel('Voltage [V]')
@@ -140,21 +136,23 @@ for i = 1:nbrOfMeas
             line([T(1) T(end)], [lowerlimit lowerlimit])
             line([T(1) T(end)], [measMean measMean], 'Color', 'g')
             subplot(2, 1, 2)
-            hold on
+            hold off
             title('Without offset')
             xlabel('Time [s]')
             ylabel('Voltage [V]')
-            plot(T, meas)
+            plot(T, data((1:measPerFile) + (measPerFile * (j - 1)), i))
             hold on
             if good(i)
                 disp('Good signal')
             else
                 disp('Bad signal')
             end
+            %pause
         end
     end
 end
 
+disp(['Found ' num2str(length(find(good == 0))) ' bad signals'])
 disp('Removing bad signals...')
 nbrOfGoods = length(find(good == 1));
 goodData = zeros(measPerFile*4, nbrOfGoods);
@@ -168,16 +166,8 @@ end
 
 nbrOfMeas = nbrOfGoods;
 data = goodData;
-    
 
-
-%% Old method to remove offsets
-
-% disp('Removing offsets...')
-% for j = 1:channels
-%     offset = mean2(data((1:measPerFile) + (measPerFile * (j - 1)), 1:end/10));
-%     data((1:measPerFile) + (measPerFile * (j - 1)), :) = data((1:measPerFile) + (measPerFile * (j - 1)), :) - offset;
-% end
+size(data)
 
 %% Clean signals from noise using the Fourier Transform
 
@@ -191,6 +181,7 @@ if plotFourierTransform
     hold on
 end
 
+fprintf(1, '  0%% done\n')
 totalIter = channels*nbrOfMeas;
 if channels*nbrOfMeas > 100
     modCheck = floor(totalIter/100);
@@ -239,7 +230,7 @@ for i = 1:nbrOfMeas
         data((1:measPerFile) + (measPerFile * (channelPairs(j) - 1)), i) = cleanedMeas;
         if mod(loopCounter, modCheck) == 0
             percentProgress = ceil(loopCounter/totalIter*100);
-            disp([num2str(percentProgress) '% done'])
+            fprintf(1, '\b\b\b\b\b\b\b\b\b\b%3d%% done\n', percentProgress)
         end
         loopCounter = loopCounter + 1;
     end
@@ -252,7 +243,7 @@ end
 
 bins = 50;
 disp('Calculating total charge...')
-ePerCoulomb = 1.602e19;
+ePerCoulomb = 1/1.602e-19;
 charge = zeros(channels, nbrOfMeas);
 for j = 1:channels
     meas = data((1:measPerFile) + (measPerFile * (channelPairs(j) - 1)), :);
@@ -290,6 +281,32 @@ if plotCharges
     end
 end
 
+%% Calculate pulse shape by averaging
+
+%Keep working here:
+
+meas = data(1:measPerFile, :);
+[tjo mins] = min(meas);
+figure(40)
+clf(40)
+hold on
+title('Pulses overlaid')
+pulseShaper = zeros(2*nRiseTime + 1, size(data, 2));
+colors = ['b', 'r', 'y', 'g']
+for i = 1:length(meas)
+%for i = 1:100
+    nRange = (mins(i) - nRiseTime):(mins(i) + nRiseTime);
+    %plot(T(nRange), meas(nRange, i))
+    plot(meas(nRange, i), colors(mod(i, 4) + 1))
+    pulseShaper(:, i) = meas(nRange, i);
+end
+pulse = mean(pulseShaper, 2);
+figure(41)
+clf(41)
+hold on
+title('Mean pulse')
+plot(pulse)
+
 %% Locate peaks
 
 disp('Locating peaks...')
@@ -303,7 +320,12 @@ for i = 1:nbrOfMeas
     end
 end
 
+
+
+
 %% Plot signals
+
+%Look into correlation between signal heights and delays
 
 if plotSignals
     disp('Plotting signals...')
@@ -313,7 +335,8 @@ if plotSignals
     suptitle('Delay Line signals')
     colors = ['r', 'g', 'b', 'y'];
     pic = 1;
-    for i = 1:1
+    for i = 1:3508
+        i
         for j = 1:channels
         color = colors(j);
             meas = data((1:measPerFile) + (measPerFile * (channelPairs(j) - 1)), i);
@@ -326,8 +349,45 @@ if plotSignals
             plot(T, meas, color)
             plot(T(signalIndices(channelPairs(j), i)), meas(signalIndices(channelPairs(j), i)), 'o')
         end
+        pause
+        clf(1)
     end
 end
+
+%% Calculate total time
+
+disp('Calculating sums of times...')
+timeSum = zeros(2, nbrOfMeas);
+
+for i = 1:nbrOfMeas
+    for k = 1:2
+        timeSum(k, i) = T(signalIndices(channelGroups(k, 1), i)) + T(signalIndices(channelGroups(k, 2), i));
+    end
+end
+
+disp('Plotting results in histogram and x-y plot...')
+bins = 500;
+
+if plotPositions
+    figure(200)
+    clf(200)
+    set(gcf, 'Name', 'Histograms of time sums')
+    suptitle('Histograms of time sums for the two delay lines')
+    subplot(2, 1, 1)
+    hold on
+    title(['Delayline for channels ' num2str(channelPairs(1)) ' and ' num2str(channelPairs(2))])
+    xlabel('$t_1 + t_2$ [s]', 'Interpreter', 'LaTeX')
+    ylabel('Counts')
+    hist(timeSum(1, :), bins)
+    subplot(2, 1, 2)
+    hold on
+    title(['Delayline for channels ' num2str(channelPairs(3)) ' and ' num2str(channelPairs(4))])
+    xlabel('$t_1 + t_2$ [s]', 'Interpreter', 'LaTeX')
+    ylabel('Counts')
+    hist(timeSum(2, :), bins)
+end
+
+
 
 %% Calculate positions
 
