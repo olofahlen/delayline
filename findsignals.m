@@ -100,8 +100,8 @@ if plotOffSets
     suptitle('Before and after removing the offset')
 end
 
-size(data)
 good = ones(nbrOfMeas, 1);
+
 for i = 1:nbrOfMeas
     for j = 1:channels
         meas = data((1:measPerFile) + (measPerFile * (j - 1)), i);
@@ -164,13 +164,11 @@ for i = 1:nbrOfMeas
     end
 end
 
-nbrOfMeas = nbrOfGoods;
 data = goodData;
-
-size(data)
+nbrOfMeas = size(data, 2);
 
 %% Clean signals from noise using the Fourier Transform
-
+if false
 disp('Cleaning with Fourier Transform...')
 
 if plotFourierTransform
@@ -235,7 +233,7 @@ for i = 1:nbrOfMeas
         loopCounter = loopCounter + 1;
     end
 end
-
+end
 %% Calculate charge
 
 %FIXME: Units seem not to be right. Expecting something like 1e7 elementary
@@ -284,7 +282,6 @@ end
 %% Calculate pulse shape by averaging
 
 %Keep working here:
-
 meas = data(1:measPerFile, :);
 [tjo mins] = min(meas);
 figure(40)
@@ -335,7 +332,7 @@ if plotSignals
     suptitle('Delay Line signals')
     colors = ['r', 'g', 'b', 'y'];
     pic = 1;
-    for i = 1:3508
+    for i = 1:1
         i
         for j = 1:channels
         color = colors(j);
@@ -349,8 +346,8 @@ if plotSignals
             plot(T, meas, color)
             plot(T(signalIndices(channelPairs(j), i)), meas(signalIndices(channelPairs(j), i)), 'o')
         end
-        pause
-        clf(1)
+        %pause
+        %clf(1)
     end
 end
 
@@ -432,6 +429,24 @@ if plotPositions
     axis square
 end
 
-%% Plot times
-%figure
-%plot(timeDiff(1, :))
+
+%%
+cut1 = 9.12e-8;
+less1 = find(timeSum(1, :) < cut1);
+more1 = find(timeSum(1, :) > cut1);
+cut2 = 9.6e-8;
+less2 = find(timeSum(2, :) < cut2);
+more2 = find(timeSum(2, :) > cut2);
+
+figure(12345)
+clf(12345)
+plot(timeDiff(1, less1), timeDiff(2, less1), '.b')
+hold on
+plot(timeDiff(1, less2), timeDiff(2, less2), '.r')
+
+figure(123456)
+clf(123456)
+plot(timeDiff(1, more1), timeDiff(2, more1), '.b')
+hold on
+plot(timeDiff(1, more2), timeDiff(2, more2), '.r')
+
