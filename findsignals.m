@@ -38,7 +38,8 @@ else
     %nbrOfMeas = 1000;
 
     %This will contain all the measurements. The four channels will be on top
-    %of each other
+    %of each other.
+    
     data = zeros(measPerFile*channels, nbrOfMeas);
 
     i = 1;
@@ -61,7 +62,6 @@ else
         if mod(i, modCheck) == 0
             percentProgress = ceil(i/nbrOfMeas*100);
             disp([num2str(percentProgress) '% done'])
-            %fprintf(
         end
         %i = i + 1;
     end
@@ -124,7 +124,7 @@ for i = 1:nbrOfMeas
         %plot(T, meas)
         %line([T(1) T(end)], [0 0])
         
-        if plotOffSets && i == 100 && j == 1
+        if plotOffSets %&& i == 100 && j == 1
             subplot(2, 1, 1)
             hold off
             title('With offset')
@@ -168,7 +168,7 @@ data = goodData;
 nbrOfMeas = size(data, 2);
 
 %% Clean signals from noise using the Fourier Transform
-if false
+
 disp('Cleaning with Fourier Transform...')
 
 if plotFourierTransform
@@ -233,7 +233,7 @@ for i = 1:nbrOfMeas
         loopCounter = loopCounter + 1;
     end
 end
-end
+
 %% Calculate charge
 
 %FIXME: Units seem not to be right. Expecting something like 1e7 elementary
@@ -294,6 +294,7 @@ for i = 1:length(meas)
 %for i = 1:100
     nRange = (mins(i) - nRiseTime):(mins(i) + nRiseTime);
     %plot(T(nRange), meas(nRange, i))
+    i
     plot(meas(nRange, i), colors(mod(i, 4) + 1))
     pulseShaper(:, i) = meas(nRange, i);
 end
@@ -368,20 +369,20 @@ bins = 500;
 if plotPositions
     figure(200)
     clf(200)
-    set(gcf, 'Name', 'Histograms of time sums')
-    suptitle('Histograms of time sums for the two delay lines')
+    set(gcf, 'Name', 'Normalized histograms of time sums')
+    suptitle('Normalized histograms of time sums for the two delay lines')
     subplot(2, 1, 1)
     hold on
     title(['Delayline for channels ' num2str(channelPairs(1)) ' and ' num2str(channelPairs(2))])
     xlabel('$t_1 + t_2$ [s]', 'Interpreter', 'LaTeX')
-    ylabel('Counts')
-    hist(timeSum(1, :), bins)
+    ylabel('Normalized counts')
+    histnorm(timeSum(1, :), bins)
     subplot(2, 1, 2)
     hold on
     title(['Delayline for channels ' num2str(channelPairs(3)) ' and ' num2str(channelPairs(4))])
     xlabel('$t_1 + t_2$ [s]', 'Interpreter', 'LaTeX')
-    ylabel('Counts')
-    hist(timeSum(2, :), bins)
+    ylabel('Normalized counts')
+    histnorm(timeSum(2, :), bins)
 end
 
 
@@ -438,15 +439,60 @@ cut2 = 9.6e-8;
 less2 = find(timeSum(2, :) < cut2);
 more2 = find(timeSum(2, :) > cut2);
 
-figure(12345)
-clf(12345)
+figure(301)
+clf(301)
+set(gcf, 'Name', 'MCP 2D-plot divided events, low times')
+title('Events with high low sums')
+hold on
 plot(timeDiff(1, less1), timeDiff(2, less1), '.b')
-hold on
 plot(timeDiff(1, less2), timeDiff(2, less2), '.r')
+xlabel('$x\propto \Delta t_x$', 'Interpreter', 'LaTeX');
+ylabel('$y\propto \Delta t_y$', 'Interpreter', 'LaTeX');
+axis square
 
-figure(123456)
-clf(123456)
-plot(timeDiff(1, more1), timeDiff(2, more1), '.b')
+figure(302)
+clf(302)
+set(gcf, 'Name', 'MCP 2D-plot divided events, high times')
+title('Events with high time sums')
 hold on
+plot(timeDiff(1, more1), timeDiff(2, more1), '.b')
 plot(timeDiff(1, more2), timeDiff(2, more2), '.r')
+xlabel('$x\propto \Delta t_x$', 'Interpreter', 'LaTeX');
+ylabel('$y\propto \Delta t_y$', 'Interpreter', 'LaTeX');
+axis square
 
+return
+%% Run this cell to plot a selected event
+
+figureNbr = 4;
+figure(figureNbr)
+dcmObj = datacursormode(figureNbr);
+returnData = dcmObj.getCursorInfo.Position;
+returnData = [1 2];
+xT = timeDiff(1, :);
+yT = timeDiff(2, :);
+[foo xevent] = min(abs(xT - returnData(1)));
+[foo yevent] = min(abs(yT - returnData(2)));
+
+if xevent == yevent
+    i = xevent;
+    disp(['Found event! Number: ' num2str(i) '. Plotting...'])
+    figure(1000)
+    clf(1000)
+    set(gcf, 'Name', 'Single event plot')
+    suptitle('Delay Line signals')
+    colors = ['r', 'g', 'b', 'y'];
+    for j = 1:channels
+    color = colors(j);
+        meas = data((1:measPerFile) + (measPerFile * (channelPairs(j) - 1)), i);
+        subplot(2, 1, ceil(j/2));
+        hold on
+        title('Delay Line signals')
+        xlabel('Time [s]')
+        ylabel('Voltage [V]')
+        plot(T, meas, color)
+        plot(T(signalIndices(channelPairs(j), i)), meas(signalIndices(channelPairs(j), i)), 'o')
+    end
+else
+    disp('Could not find event.')
+end
