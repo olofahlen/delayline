@@ -316,12 +316,25 @@ plot(pulse)
 
 disp('Locating peaks...')
 signalIndices = zeros(4, nbrOfMeas);
+signals = zeros(4, nbrOfMeas);
 
 for i = 1:nbrOfMeas
     for j = 1:channels
         meas = data((1:measPerFile) + (measPerFile * (j - 1)), i);
+        %figure(123321)
+        %clf(123321)
+        %hold on
         [minValue, minIndex] = min(meas);
+        interval = [minIndex - 2:minIndex + 2];
+        %plot(T(interval), meas(interval))
+        [p, S, mu] = polyfit(T(interval), meas(interval), 2);
+        fineT = linspace(T(interval(1)), T(interval(end)), 100);
+        [fittedData delta] = polyval(p, fineT, S, mu);
+        %plot(fineT, fittedData, 'r')
+        minT = -p(2)/(2*p(1)) * mu(2) + mu(1);
+        %plot(minT, polyval(p, minT, S, mu), 'go')
         signalIndices(j, i) = minIndex;
+        signals(j, i) = minT;
     end
 end
 
@@ -363,7 +376,8 @@ timeSum = zeros(2, nbrOfMeas);
 
 for i = 1:nbrOfMeas
     for k = 1:channels/2
-        timeSum(k, i) = T(signalIndices(channelGroups(k, 1), i)) + T(signalIndices(channelGroups(k, 2), i));
+        %timeSum(k, i) = T(signalIndices(channelGroups(k, 1), i)) + T(signalIndices(channelGroups(k, 2), i));
+        timeSum(k, i) = signals(channelGroups(k, 1), i) + signals(channelGroups(k, 2), i);
     end
 end
 
@@ -398,6 +412,7 @@ timeDiff = zeros(2, nbrOfMeas);
 for i = 1:nbrOfMeas
     for k = 1:2
         timeDiff(k, i) = T(signalIndices(channelGroups(k, 1), i)) - T(signalIndices(channelGroups(k, 2), i));
+        %timeDiff(k, i) = signals(channelGroups(k, 1), i) - signals(channelGroups(k, 2), i);
     end
 end
 
@@ -427,7 +442,8 @@ if plotPositions
     set(gcf, 'Name', 'MCP 2D-plot')
     hold on
     suptitle('Reconstruction of particle hits on the MCP')
-    plot(timeDiff(1, :), timeDiff(2, :), '.')
+    scatter(timeDiff(1, :), timeDiff(2, :), 20, mean(totalCharge), 'filled')
+    %surf(timeDiff(1, :), timeDiff(2, :), mean(totalCharge(:, :)))
     xlabel('$x\propto \Delta t_x$', 'Interpreter', 'LaTeX');
     ylabel('$y\propto \Delta t_y$', 'Interpreter', 'LaTeX');
     axis square
