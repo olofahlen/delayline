@@ -89,84 +89,6 @@ fZeroMask = zeros(2*fCutLength, 1);
 riseTime = 1e-8;
 nRiseTime = floor(riseTime/t);
 
-%% New Remove Offsets and filter out bad measurements
-
-disp('Removing offsets and finding bad signals...')
-
-if plotOffSets
-    figure(22)
-    clf(22)
-    set(gcf, 'Name', 'Signal Offsets')
-    suptitle('Before and after removing the offset')
-end
-
-good = ones(nbrOfMeas, 1);
-
-for i = 1:nbrOfMeas
-    for j = 1:channels
-        meas = data((1:measPerFile) + (measPerFile * (j - 1)), i);
-        [minVal minIndex] = min(meas);
-        potentialStart = minIndex - nRiseTime;
-        if potentialStart < measPerFile/15 || measPerFile - potentialStart < 2*nRiseTime + 1
-            good(i) = 0;
-        else
-            measStd = std(meas(1:potentialStart));
-            measMean = mean(meas(1:potentialStart));
-            upperlimit = 4*measStd + measMean;
-            lowerlimit = -4*measStd + measMean;
-            if length(find(meas < lowerlimit)) < nRiseTime/2
-                good(i) = 0;
-            end
-        end
-        meanCut = find(meas < lowerlimit, 1, 'first');
-        data((1:measPerFile) + (measPerFile * (j - 1)), i) = meas - mean(meas(1:meanCut));
-        %subplot(2, 1, 2)
-        %plot(T, meas)
-        %line([T(1) T(end)], [0 0])
-        
-        if plotOffSets %&& i == 100 && j == 1
-            subplot(2, 1, 1)
-            hold off
-            title('With offset')
-            xlabel('Time [s]')
-            ylabel('Voltage [V]')
-            plot(T, meas)
-            line([T(1); T(2)], [measStd; measStd])
-            line([T(1) T(end)], [upperlimit upperlimit])
-            line([T(1) T(end)], [lowerlimit lowerlimit])
-            line([T(1) T(end)], [measMean measMean], 'Color', 'g')
-            subplot(2, 1, 2)
-            hold off
-            title('Without offset')
-            xlabel('Time [s]')
-            ylabel('Voltage [V]')
-            plot(T, data((1:measPerFile) + (measPerFile * (j - 1)), i))
-            hold on
-            if good(i)
-                disp('Good signal')
-            else
-                disp('Bad signal')
-            end
-            %pause
-        end
-    end
-end
-
-disp(['Found ' num2str(length(find(good == 0))) ' bad signals'])
-disp('Removing bad signals...')
-nbrOfGoods = length(find(good == 1));
-goodData = zeros(measPerFile*4, nbrOfGoods);
-goodsExtracted = 0;
-for i = 1:nbrOfMeas
-    if good(i)
-        goodData(:, goodsExtracted + 1) = data(:, i);
-        goodsExtracted = goodsExtracted + 1;
-    end
-end
-
-data = goodData;
-nbrOfMeas = size(data, 2);
-
 %% Clean signals from noise using the Fourier Transform
 
 disp('Cleaning with Fourier Transform...')
@@ -234,6 +156,93 @@ for i = 1:nbrOfMeas
     end
 end
 
+%% Remove Offsets and filter out bad measurements
+
+disp('Removing offsets and finding bad signals...')
+
+if plotOffSets
+    figure(22)
+    clf(22)
+    set(gcf, 'Name', 'Signal Offsets')
+    suptitle('Before and after removing the offset')
+end
+
+good = ones(nbrOfMeas, 1);
+
+for i = 1:nbrOfMeas
+    for j = 1:channels
+        meas = data((1:measPerFile) + (measPerFile * (j - 1)), i);
+        [minVal minIndex] = min(meas);
+        potentialStart = minIndex - nRiseTime;
+        if potentialStart < measPerFile/15 || measPerFile - potentialStart < 2*nRiseTime + 1
+            good(i) = 0;
+        else
+            measStd = std(meas(1:potentialStart));
+            measMean = mean(meas(1:potentialStart));
+            upperlimit = 4*measStd + measMean;
+            lowerlimit = -4*measStd + measMean;
+            if length(find(meas < lowerlimit)) < nRiseTime/2
+                good(i) = 0;
+            end
+        end
+        meanCut = find(meas < lowerlimit, 1, 'first');
+        data((1:measPerFile) + (measPerFile * (j - 1)), i) = meas - mean(meas(1:meanCut));
+        
+        %subplot(2, 1, 2)
+        %plot(T, meas)
+        %line([T(1) T(end)], [0 0])
+        
+        if plotOffSets %&& i == 100 && j == 1
+            subplot(2, 1, 1)
+            hold off
+            title('With offset')
+            xlabel('Time [s]')
+            ylabel('Voltage [V]')
+            plot(T, meas)
+            line([T(1); T(2)], [measStd; measStd])
+            line([T(1) T(end)], [upperlimit upperlimit])
+            line([T(1) T(end)], [lowerlimit lowerlimit])
+            line([T(1) T(end)], [measMean measMean], 'Color', 'g')
+            subplot(2, 1, 2)
+            hold off
+            title('Without offset')
+            xlabel('Time [s]')
+            ylabel('Voltage [V]')
+            plot(T, data((1:measPerFile) + (measPerFile * (j - 1)), i))
+            hold on
+            if good(i)
+                disp('Good signal')
+            else
+                disp('Bad signal')
+            end
+            %pause
+        end
+    end
+end
+
+nbrOfGoods = length(find(good == 1));
+disp(['Found ' num2str(nbrOfMeas - nbrOfGoods) ' bad signals from signal shape. Removing...'])
+data = data(:, find(good == 1));
+nbrOfMeas = size(data, 2);
+
+good = ones(nbrOfMeas, 1);
+for k = 1:channels/2
+    meas = data((1:measPerFile) + (measPerFile * (channelGroups(k, 1) - 1)), :);
+    [minValues1 minIndices1] = min(meas);
+    meas = data((1:measPerFile) + (measPerFile * (channelGroups(k, 2) - 1)), :);
+    [minValues2 minIndices2] = min(meas);
+    tTot = T(minIndices1) + T(minIndices2);
+    tMean = mean(tTot);
+    tStd = std(tTot);
+    bads = find(abs(tTot - tMean) > 3*tStd);
+    good([bads]) = 0;
+end
+
+nbrOfGoods = length(find(good == 1));
+disp(['Found ' num2str(nbrOfMeas - nbrOfGoods) ' bad signals from time sum. Removing...'])
+data = data(:, find(good == 1));
+nbrOfMeas = size(data, 2);
+
 %% Calculate charge
 
 %FIXME: Units seem not to be right. Expecting something like 1e7 elementary
@@ -279,9 +288,8 @@ if plotCharges
     end
 end
 
-%% Calculate pulse shape by averaging
+%% Calculate pulse shape by averaging. This needs some more work
 
-%Keep working here:
 meas = data(1:measPerFile, :);
 [tjo mins] = min(meas);
 figure(40)
@@ -289,12 +297,11 @@ clf(40)
 hold on
 title('Pulses overlaid')
 pulseShaper = zeros(2*nRiseTime + 1, size(data, 2));
-colors = ['b', 'r', 'y', 'g']
+colors = ['b', 'r', 'y', 'g'];
 for i = 1:length(meas)
 %for i = 1:100
     nRange = (mins(i) - nRiseTime):(mins(i) + nRiseTime);
     %plot(T(nRange), meas(nRange, i))
-    i
     plot(meas(nRange, i), colors(mod(i, 4) + 1))
     pulseShaper(:, i) = meas(nRange, i);
 end
@@ -319,8 +326,6 @@ for i = 1:nbrOfMeas
 end
 
 
-
-
 %% Plot signals
 
 %Look into correlation between signal heights and delays
@@ -334,7 +339,6 @@ if plotSignals
     colors = ['r', 'g', 'b', 'y'];
     pic = 1;
     for i = 1:1
-        i
         for j = 1:channels
         color = colors(j);
             meas = data((1:measPerFile) + (measPerFile * (channelPairs(j) - 1)), i);
@@ -358,7 +362,7 @@ disp('Calculating sums of times...')
 timeSum = zeros(2, nbrOfMeas);
 
 for i = 1:nbrOfMeas
-    for k = 1:2
+    for k = 1:channels/2
         timeSum(k, i) = T(signalIndices(channelGroups(k, 1), i)) + T(signalIndices(channelGroups(k, 2), i));
     end
 end
@@ -371,18 +375,17 @@ if plotPositions
     clf(200)
     set(gcf, 'Name', 'Normalized histograms of time sums')
     suptitle('Normalized histograms of time sums for the two delay lines')
-    subplot(2, 1, 1)
-    hold on
-    title(['Delayline for channels ' num2str(channelPairs(1)) ' and ' num2str(channelPairs(2))])
-    xlabel('$t_1 + t_2$ [s]', 'Interpreter', 'LaTeX')
-    ylabel('Normalized counts')
-    histnorm(timeSum(1, :), bins)
-    subplot(2, 1, 2)
-    hold on
-    title(['Delayline for channels ' num2str(channelPairs(3)) ' and ' num2str(channelPairs(4))])
-    xlabel('$t_1 + t_2$ [s]', 'Interpreter', 'LaTeX')
-    ylabel('Normalized counts')
-    histnorm(timeSum(2, :), bins)
+    for k = 1:2
+        subplot(2, 1, k)
+        hold on
+        title(['Delayline for channels ' num2str(channelGroups(k, 1)) ' and ' num2str(channelGroups(k, 2))])
+        xlabel('$t_1 + t_2$ [s]', 'Interpreter', 'LaTeX')
+        ylabel('Normalized counts')
+        [xo, no] = histnorm(timeSum(k, :), bins, 'plot')
+        tMean = mean(timeSum(k, :));
+        tStd = std(timeSum(k, :));
+        plot(no, normpdf(no, tMean, tStd), 'r')
+    end
 end
 
 
@@ -463,19 +466,17 @@ axis square
 
 return
 %% Run this cell to plot a selected event
+% To use this, select a point in figure <figureNbr> using the data cursor,
+% then run this cell
 
 figureNbr = 4;
 figure(figureNbr)
+datacursormode on
 dcmObj = datacursormode(figureNbr);
-returnData = dcmObj.getCursorInfo.Position;
-returnData = [1 2];
-xT = timeDiff(1, :);
-yT = timeDiff(2, :);
-[foo xevent] = min(abs(xT - returnData(1)));
-[foo yevent] = min(abs(yT - returnData(2)));
+datacursormode off
+i = dcmObj.getCursorInfo.DataIndex;
 
-if xevent == yevent
-    i = xevent;
+if i >= 1
     disp(['Found event! Number: ' num2str(i) '. Plotting...'])
     figure(1000)
     clf(1000)
