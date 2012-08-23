@@ -1,5 +1,8 @@
 %% Initial
 
+%NOTE TO SELF: Work now on optimizing the code by doing away with all these
+%horrible for loops, now that data is a 3-dim array.
+
 clear all
 clc
 
@@ -40,7 +43,7 @@ else
     %This will contain all the measurements. The four channels will be on top
     %of each other.
     
-    data = zeros(measPerFile*channels, nbrOfMeas);
+    data = zeros(measPerFile, nbrOfMeas, channels);
 
     i = 1;
     if nbrOfMeas > 100
@@ -57,7 +60,7 @@ else
         for j = 1:channels
             fp = [path 'C' int2str(j) fileName(3:end)];
             importedData = importdata(fp);
-            data((1:measPerFile) + (measPerFile * (j - 1)), i) = importedData(:, 2);
+            data(:, i, j) = importedData(:, 2);
         end
         if mod(i, modCheck) == 0
             percentProgress = ceil(i/nbrOfMeas*100);
@@ -103,15 +106,12 @@ end
 
 fprintf(1, '  0%% done\n')
 totalIter = channels*nbrOfMeas;
-if channels*nbrOfMeas > 100
-    modCheck = floor(totalIter/100);
-else
-    modCheck = 1;
-end
+
+modCheck = max(floor(totalIter/100), 1);
 loopCounter = 1;
 for i = 1:nbrOfMeas
     for j = 1:channels
-        meas = data((1:measPerFile) + (measPerFile * (channelPairs(j) - 1)), i);
+        meas = data(:, i, j);
         MEAS = fft(meas)/L;
         if plotFourierTransform && i == 1 && j == 1
             subplot(2, 2, 1)
@@ -147,7 +147,7 @@ for i = 1:nbrOfMeas
             plot(f, 2*abs(MEAS(1:L/2+1))) 
         end
         
-        data((1:measPerFile) + (measPerFile * (channelPairs(j) - 1)), i) = cleanedMeas;
+        data(:, i, j) = cleanedMeas;
         if mod(loopCounter, modCheck) == 0
             percentProgress = ceil(loopCounter/totalIter*100);
             fprintf(1, '\b\b\b\b\b\b\b\b\b\b%3d%% done\n', percentProgress)
@@ -171,7 +171,7 @@ good = ones(nbrOfMeas, 1);
 
 for i = 1:nbrOfMeas
     for j = 1:channels
-        meas = data((1:measPerFile) + (measPerFile * (j - 1)), i);
+        meas = data(:, i, j);
         [minVal minIndex] = min(meas);
         potentialStart = minIndex - nRiseTime;
         if potentialStart < measPerFile/15 || measPerFile - potentialStart < 2*nRiseTime + 1
@@ -186,7 +186,7 @@ for i = 1:nbrOfMeas
             end
         end
         meanCut = find(meas < lowerlimit, 1, 'first');
-        data((1:measPerFile) + (measPerFile * (j - 1)), i) = meas - mean(meas(1:meanCut));
+        data(:, i, j) = meas - mean(meas(1:meanCut));
         
         %subplot(2, 1, 2)
         %plot(T, meas)
@@ -208,7 +208,7 @@ for i = 1:nbrOfMeas
             title('Without offset')
             xlabel('Time [s]')
             ylabel('Voltage [V]')
-            plot(T, data((1:measPerFile) + (measPerFile * (j - 1)), i))
+            plot(T, data(:, i, j))
             hold on
             if good(i)
                 disp('Good signal')
@@ -220,16 +220,19 @@ for i = 1:nbrOfMeas
     end
 end
 
+%TODO: Probably some optimization can be done here, to do away with a block
+%of code!
+
 nbrOfGoods = length(find(good == 1));
 disp(['Found ' num2str(nbrOfMeas - nbrOfGoods) ' bad signals from signal shape. Removing...'])
-data = data(:, find(good == 1));
+data = data(:, find(good == 1), :);
 nbrOfMeas = size(data, 2);
 
 good = ones(nbrOfMeas, 1);
 for k = 1:channels/2
-    meas = data((1:measPerFile) + (measPerFile * (channelGroups(k, 1) - 1)), :);
+    meas = data(:, :, channelGroups(k, 1));
     [minValues1 minIndices1] = min(meas);
-    meas = data((1:measPerFile) + (measPerFile * (channelGroups(k, 2) - 1)), :);
+    meas = data(:, :, channelGroups(k, 2));
     [minValues2 minIndices2] = min(meas);
     tTot = T(minIndices1) + T(minIndices2);
     tMean = mean(tTot);
@@ -240,7 +243,7 @@ end
 
 nbrOfGoods = length(find(good == 1));
 disp(['Found ' num2str(nbrOfMeas - nbrOfGoods) ' bad signals from time sum. Removing...'])
-data = data(:, find(good == 1));
+data = data(:, find(good == 1), :);
 nbrOfMeas = size(data, 2);
 
 %% Calculate charge
@@ -253,7 +256,7 @@ disp('Calculating total charge...')
 ePerCoulomb = 1/1.602e-19;
 charge = zeros(channels, nbrOfMeas);
 for j = 1:channels
-    meas = data((1:measPerFile) + (measPerFile * (channelPairs(j) - 1)), :);
+    meas = data(:, :, channelPairs(j));
     charge(j, :) = trapz(meas(:, :), 1)*t / inputImpedance;
 end
 totalCharge = zeros(channels/2, nbrOfMeas);
@@ -290,7 +293,7 @@ end
 
 %% Calculate pulse shape by averaging. This needs some more work
 
-meas = data(1:measPerFile, :);
+meas = data(:, :, :);
 [tjo mins] = min(meas);
 figure(40)
 clf(40)
@@ -320,7 +323,7 @@ signals = zeros(4, nbrOfMeas);
 
 for i = 1:nbrOfMeas
     for j = 1:channels
-        meas = data((1:measPerFile) + (measPerFile * (j - 1)), i);
+        meas = data(:, i, j);
         %figure(123321)
         %clf(123321)
         %hold on
@@ -354,7 +357,7 @@ if plotSignals
     for i = 1:1
         for j = 1:channels
         color = colors(j);
-            meas = data((1:measPerFile) + (measPerFile * (channelPairs(j) - 1)), i);
+            meas = data(:, i, channelPairs(j));
             subplot(2, 1, ceil(j/2));
             hold on
             title('Delay Line signals')
@@ -450,7 +453,7 @@ if plotPositions
 end
 
 
-%%
+%% Select the events corresponding to the left and right peaks of the time sums
 cut1 = 9.12e-8;
 less1 = find(timeSum(1, :) < cut1);
 more1 = find(timeSum(1, :) > cut1);
