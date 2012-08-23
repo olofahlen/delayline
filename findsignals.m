@@ -44,16 +44,10 @@ else
     %of each other.
     
     data = zeros(measPerFile, nbrOfMeas, channels);
-
-    i = 1;
-    if nbrOfMeas > 100
-        modCheck = floor(nbrOfMeas/100);
-    else
-        modCheck = 1;
-    end
-
     disp(['Loading ' num2str(nbrOfMeas*channels) ' files...'])
-    %for measFile = C1files'
+    
+    modCheck = max(floor(nbrOfMeas/100), 1);
+    fprintf(1, '  0%% done\n')
     for i = 1:nbrOfMeas
         measFile = C1files(i);
         fileName = measFile.name;
@@ -64,18 +58,18 @@ else
         end
         if mod(i, modCheck) == 0
             percentProgress = ceil(i/nbrOfMeas*100);
-            disp([num2str(percentProgress) '% done'])
+            fprintf(1, '\b\b\b\b\b\b\b\b\b\b%3d%% done\n', percentProgress)
         end
-        %i = i + 1;
     end
     if saveData
+        disp('Saving data...')
         save mcpData
     end
 end
 
 %% Post Loading
 
-channelPairs = [1 2 3 4]; %Real
+channelPairs = [1 2 3 4]; %1 2 3 4 is the correct configuration
 channelGroups = [channelPairs(1:2); channelPairs(3:4)];
 freqCut = 0.2e9;
 
@@ -87,7 +81,7 @@ Fs = 1/t; %Sampling frequency
 L = measPerFile; %Length of signal
 f = Fs/2*linspace(0,1,L/2+1); %Frequency vector
 fCutLength = length(f) - find(f > freqCut, 1, 'first');
-fZeroMask = zeros(2*fCutLength, 1);
+fZeroMask = zeros(2*fCutLength, size(data, 2), size(data, 3));
 
 riseTime = 1e-8;
 nRiseTime = floor(riseTime/t);
@@ -97,63 +91,47 @@ nRiseTime = floor(riseTime/t);
 disp('Cleaning with Fourier Transform...')
 
 if plotFourierTransform
+    i = 1;
+    j = 1;
     figure(11)
     clf(11)
     set(gcf, 'Name', 'Signal Fourier Transform')
     suptitle(['Before and after frequency cut at ' num2str(freqCut, '%.2e')])
     hold on
+    subplot(2, 2, 1)
+    hold on
+    title('Before low pass')
+    xlabel('Time [s]')
+    ylabel('Voltage [V]')
+    plot(T, data(:, i, j))
 end
 
-fprintf(1, '  0%% done\n')
-totalIter = channels*nbrOfMeas;
-
-modCheck = max(floor(totalIter/100), 1);
-loopCounter = 1;
-for i = 1:nbrOfMeas
-    for j = 1:channels
-        meas = data(:, i, j);
-        MEAS = fft(meas)/L;
-        if plotFourierTransform && i == 1 && j == 1
-            subplot(2, 2, 1)
-            hold on
-            title('Before low pass')
-            xlabel('Time [s]')
-            ylabel('Voltage [V]')
-            plot(T, meas)
-            
-            subplot(2, 2, 2)
-            hold on
-            title('Uncut Fourier spectrum')
-            xlabel('Frequency (Hz)')
-            ylabel('Fourier transform [Vs]')
-            plot(f, 2*abs(MEAS(1:L/2+1))) 
-        end
-        
-        MEAS(L/2 - fCutLength + 1:L/2 + fCutLength) = fZeroMask;
-        cleanedMeas = real(ifft(MEAS));
-        
-        if plotFourierTransform && i == 1 && j == 1
-            subplot(2, 2, 3)
-            hold on
-            title('After low pass')
-            xlabel('Time [s]')
-            ylabel('Voltage [V]')
-            plot(T, cleanedMeas);
-            subplot(2, 2, 4)
-            hold on
-            title('Cut Fourier spectrum')
-            xlabel('Frequency (Hz)')
-            ylabel('Fourier transform [Vs]')
-            plot(f, 2*abs(MEAS(1:L/2+1))) 
-        end
-        
-        data(:, i, j) = cleanedMeas;
-        if mod(loopCounter, modCheck) == 0
-            percentProgress = ceil(loopCounter/totalIter*100);
-            fprintf(1, '\b\b\b\b\b\b\b\b\b\b%3d%% done\n', percentProgress)
-        end
-        loopCounter = loopCounter + 1;
-    end
+%Memory may be saved here by overwriting the data-variable instead of
+%creating a new variable (DATA).
+DATA = fft(data)/L;
+if plotFourierTransform
+    subplot(2, 2, 2)
+    hold on
+    title('Uncut Fourier spectrum')
+    xlabel('Frequency (Hz)')
+    ylabel('Fourier transform [Vs]')
+    plot(f, 2*abs(DATA(1:L/2+1, i, j))) 
+end
+DATA(L/2 - fCutLength + 1:L/2 + fCutLength, :, :) = fZeroMask;
+data = real(ifft(DATA));
+if plotFourierTransform
+    subplot(2, 2, 3)
+    hold on
+    title('After low pass')
+    xlabel('Time [s]')
+    ylabel('Voltage [V]')
+    plot(T, data(:, i, j));
+    subplot(2, 2, 4)
+    hold on
+    title('Cut Fourier spectrum')
+    xlabel('Frequency (Hz)')
+    ylabel('Fourier transform [Vs]')
+    plot(f, 2*abs(DATA(1:L/2+1, i, j))) 
 end
 
 %% Remove Offsets and filter out bad measurements
@@ -167,78 +145,53 @@ if plotOffSets
     suptitle('Before and after removing the offset')
 end
 
-good = ones(nbrOfMeas, 1);
+good = ones(size(data, 2), 1);
+
+[minVal minIndex] = min(data);
+potentialStart = squeeze(minIndex - nRiseTime);
+[row col] = find(potentialStart < measPerFile/15);
+good(row) = 0;
+[row col] = find(potentialStart > measPerFile - (2*nRiseTime + 1));
+good(row) = 0;
+%Performance can be improved here by removin the bad measurements before
+%continuing
 
 for i = 1:nbrOfMeas
     for j = 1:channels
-        meas = data(:, i, j);
-        [minVal minIndex] = min(meas);
-        potentialStart = minIndex - nRiseTime;
-        if potentialStart < measPerFile/15 || measPerFile - potentialStart < 2*nRiseTime + 1
-            good(i) = 0;
-        else
-            measStd = std(meas(1:potentialStart));
-            measMean = mean(meas(1:potentialStart));
+        if good(i)
+            meas = data(:, i, j);
+    %         [minVal minIndex] = min(meas);
+    %         potentialStart = minIndex - nRiseTime;
+    %         if potentialStart < measPerFile/15 || measPerFile - potentialStart < 2*nRiseTime + 1
+    %             good(i) = 0;
+    %         else
+            measStd = std(meas(1:potentialStart(i, j)));
+            measMean = mean(meas(1:potentialStart(i, j)));
             upperlimit = 4*measStd + measMean;
             lowerlimit = -4*measStd + measMean;
-            if length(find(meas < lowerlimit)) < nRiseTime/2
+            if length(find(meas(potentialStart(i, j):potentialStart(i, j) + 2*nRiseTime) < lowerlimit)) < nRiseTime/2
                 good(i) = 0;
             end
-        end
-        meanCut = find(meas < lowerlimit, 1, 'first');
-        data(:, i, j) = meas - mean(meas(1:meanCut));
-        
-        %subplot(2, 1, 2)
-        %plot(T, meas)
-        %line([T(1) T(end)], [0 0])
-        
-        if plotOffSets %&& i == 100 && j == 1
-            subplot(2, 1, 1)
-            hold off
-            title('With offset')
-            xlabel('Time [s]')
-            ylabel('Voltage [V]')
-            plot(T, meas)
-            line([T(1); T(2)], [measStd; measStd])
-            line([T(1) T(end)], [upperlimit upperlimit])
-            line([T(1) T(end)], [lowerlimit lowerlimit])
-            line([T(1) T(end)], [measMean measMean], 'Color', 'g')
-            subplot(2, 1, 2)
-            hold off
-            title('Without offset')
-            xlabel('Time [s]')
-            ylabel('Voltage [V]')
-            plot(T, data(:, i, j))
-            hold on
-            if good(i)
-                disp('Good signal')
-            else
-                disp('Bad signal')
-            end
-            %pause
         end
     end
 end
 
-%TODO: Probably some optimization can be done here, to do away with a block
-%of code!
-
-nbrOfGoods = length(find(good == 1));
+goods = find(good == 1)
+nbrOfGoods = length(goods);
 disp(['Found ' num2str(nbrOfMeas - nbrOfGoods) ' bad signals from signal shape. Removing...'])
-data = data(:, find(good == 1), :);
+data = data(:, goods, :);
 nbrOfMeas = size(data, 2);
+good = ones(size(data, 2), 1);
 
-good = ones(nbrOfMeas, 1);
+[minValues minIndices] = min(data);
+minIndices = squeeze(minIndices);
+tTot = T(minIndices(:, [channelGroups(1, 1) channelGroups(2, 1)])) + T(minIndices(:, [channelGroups(1, 2) channelGroups(2, 2)]));
+tMean = mean(tTot);
+tStd = std(tTot);
+
 for k = 1:channels/2
-    meas = data(:, :, channelGroups(k, 1));
-    [minValues1 minIndices1] = min(meas);
-    meas = data(:, :, channelGroups(k, 2));
-    [minValues2 minIndices2] = min(meas);
-    tTot = T(minIndices1) + T(minIndices2);
-    tMean = mean(tTot);
-    tStd = std(tTot);
-    bads = find(abs(tTot - tMean) > 3*tStd);
-    good([bads]) = 0;
+    [row col] = find(abs([tTot(:, k) - tMean(k)]) > 3*tStd(k));
+    good(row) = 0;
 end
 
 nbrOfGoods = length(find(good == 1));
