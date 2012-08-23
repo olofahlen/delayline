@@ -5,7 +5,6 @@
 
 clear all
 clc
-close all
 
 % This file loads waveforms (Time + Amplitude) saved by the WavePro7100
 % The variable 'path' below should be the absolute path to a folder
@@ -237,6 +236,7 @@ end
 
 %% Calculate pulse shape by averaging. This needs some more work
 
+disp('Calculatin mean pulse shape...')
 [foo mins] = min(data);
 mins = squeeze(mins);
 figure(40)
@@ -266,8 +266,8 @@ plot(pulse(:, 1))
 %% Locate peaks
 
 disp('Locating peaks...')
-signalIndices = zeros(4, nbrOfMeas);
-signals = zeros(4, nbrOfMeas);
+signalIndices = zeros(nbrOfMeas, 4);
+signals = zeros(nbrOfMeas, 4);
 
 for i = 1:nbrOfMeas
     for j = 1:channels
@@ -275,17 +275,18 @@ for i = 1:nbrOfMeas
         %figure(123321)
         %clf(123321)
         %hold on
-        [minValue, minIndex] = min(meas);
+        [minValue minIndex] = min(meas);
         interval = [minIndex - 2:minIndex + 2];
         %plot(T(interval), meas(interval))
         [p, S, mu] = polyfit(T(interval), meas(interval), 2);
-        fineT = linspace(T(interval(1)), T(interval(end)), 100);
-        [fittedData delta] = polyval(p, fineT, S, mu);
+        %fineT = linspace(T(interval(1)), T(interval(end)), 100);
+        %[fittedData delta] = polyval(p, fineT, S, mu);
         %plot(fineT, fittedData, 'r')
         minT = -p(2)/(2*p(1)) * mu(2) + mu(1);
+        %minV = polyval(p, minT, S, mu);
         %plot(minT, polyval(p, minT, S, mu), 'go')
-        signalIndices(j, i) = minIndex;
-        signals(j, i) = minT;
+        signalIndices(i, j) = minIndex;
+        signals(i, j) = minT;
     end
 end
 
@@ -304,21 +305,23 @@ if plotSignals
     pic = 1;
     for i = 1:1
         for j = 1:channels
-        color = colors(j);
+            color = colors(j);
             meas = data(:, i, channelPairs(j));
             subplot(2, 1, ceil(j/2));
             hold on
             title('Delay Line signals')
             xlabel('Time [s]')
             ylabel('Voltage [V]')
-            %plot(T, data((1:measPerFile) + (measPerFile * (channelPairs(j) - 1)), i), color)
             plot(T, meas, color)
-            plot(T(signalIndices(channelPairs(j), i)), meas(signalIndices(channelPairs(j), i)), 'o')
+            plot(T(signalIndices(i, channelPairs(j))), meas(signalIndices(i, channelPairs(j))), 'o')
+            %The y-value in the followin plot is not exact
+            plot(signals(i, j), meas(signalIndices(i, channelPairs(j))), '*')
         end
         %pause
         %clf(1)
     end
 end
+return
 
 %% Calculate total time
 
