@@ -326,14 +326,10 @@ return
 %% Calculate total time
 
 disp('Calculating sums of times...')
-timeSum = zeros(2, nbrOfMeas);
+timeSum = zeros(nbrOfMeas, 2);
 
-for i = 1:nbrOfMeas
-    for k = 1:channels/2
-        %timeSum(k, i) = T(signalIndices(channelGroups(k, 1), i)) + T(signalIndices(channelGroups(k, 2), i));
-        timeSum(k, i) = signals(channelGroups(k, 1), i) + signals(channelGroups(k, 2), i);
-    end
-end
+%timeSum = [sum(signalIndices(:, channelGroups(1, :)), 2) sum(signalIndices(:, channelGroups(2, :)), 2)];
+timeSum = [sum(signals(:, channelGroups(1, :)), 2) sum(signals(:, channelGroups(2, :)), 2)];
 
 disp('Plotting results in histogram and x-y plot...')
 bins = 500;
@@ -349,14 +345,12 @@ if plotPositions
         title(['Delayline for channels ' num2str(channelGroups(k, 1)) ' and ' num2str(channelGroups(k, 2))])
         xlabel('$t_1 + t_2$ [s]', 'Interpreter', 'LaTeX')
         ylabel('Normalized counts')
-        [xo, no] = histnorm(timeSum(k, :), bins, 'plot')
-        tMean = mean(timeSum(k, :));
-        tStd = std(timeSum(k, :));
+        [xo, no] = histnorm(timeSum(:, k), bins, 'plot');
+        tMean = mean(timeSum(:, k));
+        tStd = std(timeSum(:, k));
         plot(no, normpdf(no, tMean, tStd), 'r')
     end
 end
-
-
 
 %% Calculate positions
 
