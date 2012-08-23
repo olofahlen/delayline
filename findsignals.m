@@ -5,6 +5,7 @@
 
 clear all
 clc
+close all
 
 % This file loads waveforms (Time + Amplitude) saved by the WavePro7100
 % The variable 'path' below should be the absolute path to a folder
@@ -147,7 +148,7 @@ end
 
 good = ones(size(data, 2), 1);
 
-[minVal minIndex] = min(data);
+[minVal minIndex] = min(data);;
 potentialStart = squeeze(minIndex - nRiseTime);
 [row col] = find(potentialStart < measPerFile/15);
 good(row) = 0;
@@ -160,11 +161,6 @@ for i = 1:nbrOfMeas
     for j = 1:channels
         if good(i)
             meas = data(:, i, j);
-    %         [minVal minIndex] = min(meas);
-    %         potentialStart = minIndex - nRiseTime;
-    %         if potentialStart < measPerFile/15 || measPerFile - potentialStart < 2*nRiseTime + 1
-    %             good(i) = 0;
-    %         else
             measStd = std(meas(1:potentialStart(i, j)));
             measMean = mean(meas(1:potentialStart(i, j)));
             upperlimit = 4*measStd + measMean;
@@ -176,7 +172,7 @@ for i = 1:nbrOfMeas
     end
 end
 
-goods = find(good == 1)
+goods = find(good == 1);
 nbrOfGoods = length(goods);
 disp(['Found ' num2str(nbrOfMeas - nbrOfGoods) ' bad signals from signal shape. Removing...'])
 data = data(:, goods, :);
@@ -207,14 +203,9 @@ nbrOfMeas = size(data, 2);
 bins = 50;
 disp('Calculating total charge...')
 ePerCoulomb = 1/1.602e-19;
-charge = zeros(channels, nbrOfMeas);
-for j = 1:channels
-    meas = data(:, :, channelPairs(j));
-    charge(j, :) = trapz(meas(:, :), 1)*t / inputImpedance;
-end
-totalCharge = zeros(channels/2, nbrOfMeas);
-totalCharge(1, :) = charge(channelPairs(1), :) + charge(channelPairs(2), :);
-totalCharge(2, :) = charge(channelPairs(3), :) + charge(channelPairs(4), :);
+%charge = zeros(nbrOfMeas, channels);
+charge = squeeze(sum(data))*t / inputImpedance;
+totalCharge = [sum(charge(:, [channelGroups(1, :)]), 2) sum(charge(:, [channelGroups(2, :)]), 2)];
 
 if plotCharges
     figure(30)
@@ -227,7 +218,7 @@ if plotCharges
         title(['Charge deposited on channel ' num2str(channelPairs(j))])
         xlabel('Charge [e]')
         ylabel('Counts')
-        hist(charge(j, :)*ePerCoulomb, bins)
+        hist(charge(:, j)*ePerCoulomb, bins)
     end
 
     figure(31)
@@ -240,9 +231,10 @@ if plotCharges
         title(['Total charge deposited on channels ' num2str(channelGroups(k, 1)) ' and ' num2str(channelGroups(k, 2))])
         xlabel('Charge [e]')
         ylabel('Counts')
-        hist(totalCharge(k, :)*ePerCoulomb, bins)
+        hist(totalCharge(:, k)*ePerCoulomb, bins)
     end
 end
+return
 
 %% Calculate pulse shape by averaging. This needs some more work
 
