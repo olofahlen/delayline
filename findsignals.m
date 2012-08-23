@@ -234,31 +234,34 @@ if plotCharges
         hist(totalCharge(:, k)*ePerCoulomb, bins)
     end
 end
-return
 
 %% Calculate pulse shape by averaging. This needs some more work
 
-meas = data(:, :, :);
-[tjo mins] = min(meas);
+[foo mins] = min(data);
+mins = squeeze(mins);
 figure(40)
 clf(40)
 hold on
 title('Pulses overlaid')
-pulseShaper = zeros(2*nRiseTime + 1, size(data, 2));
+pulseShaper = zeros(2*nRiseTime + 1, size(data, 2), size(data, 3));
 colors = ['b', 'r', 'y', 'g'];
-for i = 1:length(meas)
-%for i = 1:100
-    nRange = (mins(i) - nRiseTime):(mins(i) + nRiseTime);
-    %plot(T(nRange), meas(nRange, i))
-    plot(meas(nRange, i), colors(mod(i, 4) + 1))
-    pulseShaper(:, i) = meas(nRange, i);
+for i = 1:nbrOfMeas
+    for j = 1:channels
+        nRange = (mins(i, j) - nRiseTime):(mins(i, j) + nRiseTime);
+        %plot(T(nRange), meas(nRange, i))
+        pulseShaper(:, i, j) = data(nRange, i, j);
+        if j == 1
+            plot(pulseShaper(:, i, j), colors(mod(i, 4) + 1))
+        end
+    end
 end
-pulse = mean(pulseShaper, 2);
+
+pulse = squeeze(mean(pulseShaper, 2));
 figure(41)
 clf(41)
 hold on
-title('Mean pulse')
-plot(pulse)
+title('Mean pulse for channel 1')
+plot(pulse(:, 1))
 
 %% Locate peaks
 
