@@ -12,16 +12,10 @@ tic
 % containing measurements in the form 'C?*.dat', for example
 % 'C1mcp00012.dat'.
 
-%% Settings
-plotOffSets = 0;
-plotFourierTransform = 1;
-plotCharges = 1;
-plotSignals = 1;
-plotPositions = 1;
+%% Load data
+
 importSavedData = 1;
 saveData = 1;
-
-%% Load data
 
 if importSavedData
     disp('Loading saved data...')
@@ -37,7 +31,7 @@ else
     dummyData = importdata([path C1files(1).name]);
     measPerFile = length(dummyData);
     nbrOfMeas = length(C1files);
-    %nbrOfMeas = 1000;
+    %nbrOfMeas = 50;
 
     %This will contain all the measurements. The four channels will be on top
     %of each other.
@@ -62,15 +56,25 @@ else
     end
     if saveData
         disp('Saving data...')
-        save mcpData
+        save('mcpData3')
     end
 end
+
+%% Settings
+plotOffsets = 1;
+plotFourierTransform = 1;
+plotCharges = 1;
+plotFittedPeaks = 1;
+plotSignals = 1;
+plotPositions = 1;
 
 %% Post Loading
 
 channelPairs = [1 2 3 4]; %1 2 3 4 is the correct configuration
 channelGroups = [channelPairs(1:2); channelPairs(3:4)];
 freqCut = 0.2e9;
+
+colors = ['b', 'r', 'y', 'g'];
 
 inputImpedance = 50; %Impedance of the oscilloscope in Ohms
 
@@ -117,7 +121,7 @@ if plotFourierTransform
     plot(f, 2*abs(DATA(1:L/2+1, i, j))) 
 end
 DATA(L/2 - fCutLength + 1:L/2 + fCutLength, :, :) = fZeroMask;
-data = real(ifft(DATA));
+data = real(ifft(DATA))*L;
 if plotFourierTransform
     subplot(2, 2, 3)
     hold on
@@ -137,12 +141,37 @@ end
 
 disp('Removing offsets and finding bad signals...')
 
-if plotOffSets
+if plotOffsets
     figure(22)
     clf(22)
     set(gcf, 'Name', 'Signal Offsets')
     suptitle('Before and after removing the offset')
+    subplot(2, 1, 1)
+    hold on
+    title('Before removing offset')
+    for j = 1:channels
+        plot(T, data(:, 1, channelPairs(j)), colors(channelPairs(j)))
+    end
+    xlabel('Time [s]')
+    ylabel('Voltage [V]')
 end
+
+pedestal = mean(data(1:measPerFile/15, :, :));
+data = bsxfun(@minus, data, pedestal);
+
+if plotOffsets
+    subplot(2, 1, 2)
+    hold on
+    title('After removing offset')
+    i = 1;
+    j = 1;
+    for j = 1:channels
+        plot(T, data(:, 1, channelPairs(j)), colors(channelPairs(j)))
+    end
+    xlabel('Time [s]')
+    ylabel('Voltage [V]')
+end
+    
 
 good = ones(size(data, 2), 1);
 
@@ -198,10 +227,25 @@ nbrOfMeas = size(data, 2);
 %FIXME: Units seem not to be right. Expecting something like 1e7 elementary
 %charges per event. At least I hope so!!
 
-bins = 50;
+% [minValues minIndices] = min(data);
+% minIndices = squeeze(minIndices);
+% i =723;
+% j = 4;
+% figure(111)
+% clf(111)
+% plot(T, data(:, i, j))
+% hold on
+% interval = minIndices(i, j) - nRiseTime : minIndices(i, j) + floor(nRiseTime*1.1);
+% plot(T(interval), data(interval, i, j), 'r')
+% clc
+% c = sum(data(interval, i, j)) * t / (50 * 1.602e-19)
+% c = sum(data(:, i, j)) * t / (50 * 1.602e-19)
+
+interval = linspace(-1e7, 5e6, 100);
+bins = 100;
 disp('Calculating total charge...')
-ePerCoulomb = 1/1.602e-19;
-charge = squeeze(sum(data))*t / inputImpedance;
+eCharge = 1.602e-19;
+charge = squeeze(sum(data))*t / (inputImpedance * eCharge);
 totalCharge = [sum(charge(:, [channelGroups(1, :)]), 2) sum(charge(:, [channelGroups(2, :)]), 2)];
 
 if plotCharges
@@ -215,7 +259,8 @@ if plotCharges
         title(['Charge deposited on channel ' num2str(channelPairs(j))])
         xlabel('Charge [e]')
         ylabel('Counts')
-        hist(charge(:, j)*ePerCoulomb, bins)
+        %hist(charge(:, j), interval)
+        hist(charge(:, j), bins)
     end
 
     figure(31)
@@ -228,13 +273,14 @@ if plotCharges
         title(['Total charge deposited on channels ' num2str(channelGroups(k, 1)) ' and ' num2str(channelGroups(k, 2))])
         xlabel('Charge [e]')
         ylabel('Counts')
-        hist(totalCharge(:, k)*ePerCoulomb, bins)
+        %hist(totalCharge(:, k), interval)
+        hist(totalCharge(:, k), bins)
     end
 end
 
 %% Calculate pulse shape by averaging. This needs some more work
 
-disp('Calculatin mean pulse shape...')
+disp('Calculating mean pulse shape...')
 [foo mins] = min(data);
 mins = squeeze(mins);
 figure(40)
@@ -242,7 +288,6 @@ clf(40)
 hold on
 title('Pulses overlaid')
 pulseShaper = zeros(2*nRiseTime + 1, size(data, 2), size(data, 3));
-colors = ['b', 'r', 'y', 'g'];
 for i = 1:nbrOfMeas
     for j = 1:channels
         nRange = (mins(i, j) - nRiseTime):(mins(i, j) + nRiseTime);
@@ -270,22 +315,24 @@ signals = zeros(nbrOfMeas, 4);
 for i = 1:nbrOfMeas
     for j = 1:channels
         meas = data(:, i, j);
-        %figure(123321)
-        %clf(123321)
-        %hold on
         [minValue minIndex] = min(meas);
         interval = [minIndex - 2:minIndex + 2];
-        %plot(T(interval), meas(interval))
         [p, S, mu] = polyfit(T(interval), meas(interval), 2);
-        %fineT = linspace(T(interval(1)), T(interval(end)), 100);
-        %[fittedData delta] = polyval(p, fineT, S, mu);
-        %plot(fineT, fittedData, 'r')
         minT = -p(2)/(2*p(1)) * mu(2) + mu(1);
-        %minV = polyval(p, minT, S, mu);
-        %plot(minT, polyval(p, minT, S, mu), 'go')
         signalIndices(i, j) = minIndex;
         signals(i, j) = minT;
     end
+end
+if plotFittedPeaks
+    figure(400)
+    clf(400)
+    hold on
+    plot(T(interval), meas(interval))
+    fineT = linspace(T(interval(1)), T(interval(end)), 100);
+    [fittedData delta] = polyval(p, fineT, S, mu);
+    plot(fineT, fittedData, 'r')
+    minV = polyval(p, minT, S, mu);
+    plot(minT, polyval(p, minT, S, mu), 'go')
 end
 
 
@@ -299,7 +346,6 @@ if plotSignals
     clf(1)
     set(gcf, 'Name', 'Signal plots')
     suptitle('Delay Line signals')
-    colors = ['r', 'g', 'b', 'y'];
     pic = 1;
     for i = 1:1
         for j = 1:channels
@@ -449,7 +495,6 @@ if i >= 1
     clf(1000)
     set(gcf, 'Name', 'Single event plot')
     suptitle('Delay Line signals')
-    colors = ['r', 'g', 'b', 'y'];
     for j = 1:channels
     color = colors(j);
         meas = data((1:measPerFile) + (measPerFile * (channelPairs(j) - 1)), i);
