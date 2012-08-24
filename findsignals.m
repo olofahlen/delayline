@@ -25,7 +25,7 @@ saveData = 1;
 
 if importSavedData
     disp('Loading saved data...')
-    load mcpData
+    load mcpData3
 else
     path = '/home/thorleif/mcp/tests/lotsofmeas/';
     %path = '/home/thorleif/mcp/tests/gooddata/';
