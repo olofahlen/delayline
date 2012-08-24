@@ -5,6 +5,7 @@
 
 clear all
 clc
+tic
 
 % This file loads waveforms (Time + Amplitude) saved by the WavePro7100
 % The variable 'path' below should be the absolute path to a folder
@@ -19,8 +20,6 @@ plotSignals = 1;
 plotPositions = 1;
 importSavedData = 1;
 saveData = 1;
-
-%set(0,'DefaultFigureNumberTitle', 'off')
 
 %% Load data
 
@@ -153,7 +152,7 @@ potentialStart = squeeze(minIndex - nRiseTime);
 good(row) = 0;
 [row col] = find(potentialStart > measPerFile - (2*nRiseTime + 1));
 good(row) = 0;
-%Performance can be improved here by removin the bad measurements before
+%Performance can be improved here by removing the bad measurements before
 %continuing
 
 for i = 1:nbrOfMeas
@@ -202,7 +201,6 @@ nbrOfMeas = size(data, 2);
 bins = 50;
 disp('Calculating total charge...')
 ePerCoulomb = 1/1.602e-19;
-%charge = zeros(nbrOfMeas, channels);
 charge = squeeze(sum(data))*t / inputImpedance;
 totalCharge = [sum(charge(:, [channelGroups(1, :)]), 2) sum(charge(:, [channelGroups(2, :)]), 2)];
 
@@ -321,7 +319,6 @@ if plotSignals
         %clf(1)
     end
 end
-return
 
 %% Calculate total time
 
@@ -355,14 +352,12 @@ end
 %% Calculate positions
 
 disp('Calculating spatial coordinates...')
-timeDiff = zeros(2, nbrOfMeas);
 
-for i = 1:nbrOfMeas
-    for k = 1:2
-        timeDiff(k, i) = T(signalIndices(channelGroups(k, 1), i)) - T(signalIndices(channelGroups(k, 2), i));
-        %timeDiff(k, i) = signals(channelGroups(k, 1), i) - signals(channelGroups(k, 2), i);
-    end
-end
+%timeDiff = [diff(signalIndices(:, channelGroups(1, :)), 2) diff(signalIndices(:, channelGroups(2, :)), 2)];
+timeDiff = [diff(signals(:, channelGroups(1, :)), 1, 2) diff(signals(:, channelGroups(2, :)), 1, 2)];
+
+%This minus sign is arbitrary, only mirrors the image in the origin.
+timeDiff = -timeDiff;
 
 disp('Plotting results in histogram and x-y plot...')
 bins = 500;
@@ -377,20 +372,20 @@ if plotPositions
     title(['Delayline for channels ' num2str(channelPairs(1)) ' and ' num2str(channelPairs(2))])
     xlabel('$\Delta t$ [s]', 'Interpreter', 'LaTeX')
     ylabel('Counts')
-    hist(timeDiff(1, :), bins)
+    hist(timeDiff(:, 1), bins)
     subplot(2, 1, 2)
     hold on
     title(['Delayline for channels ' num2str(channelPairs(3)) ' and ' num2str(channelPairs(4))])
     xlabel('$\Delta t$ [s]', 'Interpreter', 'LaTeX')
     ylabel('Counts')
-    hist(timeDiff(2, :), bins)
+    hist(timeDiff(:, 2), bins)
 
     figure(4)
     clf(4)
     set(gcf, 'Name', 'MCP 2D-plot')
     hold on
     suptitle('Reconstruction of particle hits on the MCP')
-    scatter(timeDiff(1, :), timeDiff(2, :), 20, mean(totalCharge), 'filled')
+    scatter(timeDiff(:, 1), timeDiff(:, 2), 20, mean(totalCharge,2 ), 'filled')
     %surf(timeDiff(1, :), timeDiff(2, :), mean(totalCharge(:, :)))
     xlabel('$x\propto \Delta t_x$', 'Interpreter', 'LaTeX');
     ylabel('$y\propto \Delta t_y$', 'Interpreter', 'LaTeX');
@@ -399,36 +394,44 @@ end
 
 
 %% Select the events corresponding to the left and right peaks of the time sums
-cut1 = 9.12e-8;
-less1 = find(timeSum(1, :) < cut1);
-more1 = find(timeSum(1, :) > cut1);
+cut1 = 9.16e-8;
+less1 = find(timeSum(:, 1) < cut1);
+more1 = find(timeSum(:, 1) > cut1);
+
 cut2 = 9.6e-8;
-less2 = find(timeSum(2, :) < cut2);
-more2 = find(timeSum(2, :) > cut2);
+less2 = find(timeSum(:, 2) < cut2);
+more2 = find(timeSum(:, 2) > cut2);
 
 figure(301)
 clf(301)
-set(gcf, 'Name', 'MCP 2D-plot divided events, low times')
-title('Events with high low sums')
 hold on
-plot(timeDiff(1, less1), timeDiff(2, less1), '.b')
-plot(timeDiff(1, less2), timeDiff(2, less2), '.r')
+set(gcf, 'Name', 'MCP 2D-plot with time cuts')
+suptitle('Events cut in time histograms')
+
+subplot(1, 2, 1)
+hold on
+title(['Events cut at ' num2str(cut1) 's in time histogram for channels ' num2str(channelGroups(1, 1)) ' and ' num2str(channelGroups(1, 2))])
+scatter(timeDiff(less1, 1), timeDiff(less1, 2), 'b')
+scatter(timeDiff(more1, 1), timeDiff(more1, 2), 'r')
 xlabel('$x\propto \Delta t_x$', 'Interpreter', 'LaTeX');
 ylabel('$y\propto \Delta t_y$', 'Interpreter', 'LaTeX');
+legend('Short times', 'Long times')
 axis square
 
-figure(302)
-clf(302)
-set(gcf, 'Name', 'MCP 2D-plot divided events, high times')
-title('Events with high time sums')
+subplot(1, 2, 2)
 hold on
-plot(timeDiff(1, more1), timeDiff(2, more1), '.b')
-plot(timeDiff(1, more2), timeDiff(2, more2), '.r')
+title(['Events cut at ' num2str(cut2) 's in time histogram for channels ' num2str(channelGroups(2, 1)) ' and ' num2str(channelGroups(2, 2))])
+scatter(timeDiff(less2, 1), timeDiff(less2, 2), 'b')
+scatter(timeDiff(more2, 1), timeDiff(more2, 2), 'r')
 xlabel('$x\propto \Delta t_x$', 'Interpreter', 'LaTeX');
 ylabel('$y\propto \Delta t_y$', 'Interpreter', 'LaTeX');
+legend('Short times', 'Long times')
 axis square
 
+%%
+toc
 return
+
 %% Run this cell to plot a selected event
 % To use this, select a point in figure <figureNbr> using the data cursor,
 % then run this cell
