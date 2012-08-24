@@ -224,22 +224,9 @@ nbrOfMeas = size(data, 2);
 
 %% Calculate charge
 
-%FIXME: Units seem not to be right. Expecting something like 1e7 elementary
-%charges per event. At least I hope so!!
-
-% [minValues minIndices] = min(data);
-% minIndices = squeeze(minIndices);
-% i =723;
-% j = 4;
-% figure(111)
-% clf(111)
-% plot(T, data(:, i, j))
-% hold on
-% interval = minIndices(i, j) - nRiseTime : minIndices(i, j) + floor(nRiseTime*1.1);
-% plot(T(interval), data(interval, i, j), 'r')
-% clc
-% c = sum(data(interval, i, j)) * t / (50 * 1.602e-19)
-% c = sum(data(:, i, j)) * t / (50 * 1.602e-19)
+%Here it could be worthwhile to only integrate the pulse of width
+%2*nRiseTime instead of the whole pulse, trusting that the pedistal
+%subtraction will take care of the noise.
 
 interval = linspace(-1e7, 5e6, 100);
 bins = 100;
