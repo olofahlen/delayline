@@ -2,6 +2,7 @@
 
 clear all
 clc
+tic
 
 % This file loads waveforms (Time + Amplitude) saved by the WavePro7100
 % The variable 'path' below should be the absolute path to a folder
@@ -480,6 +481,7 @@ xlabel('$x\propto \Delta t_x$', 'Interpreter', 'LaTeX');
 ylabel('$y\propto \Delta t_y$', 'Interpreter', 'LaTeX');
 axis square
 
+toc
 return
 %% Run this cell to plot a selected event
 % To use this, select a point in figure <figureNbr> using the data cursor,
