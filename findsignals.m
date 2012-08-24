@@ -1,8 +1,6 @@
 %% Initial
 
-%NOTE TO SELF: Work now on optimizing the code by doing away with all these
-%horrible for loops, now that data is a 3-dim array.
-
+%Toolboxes: DSP, SIgnal Processing, Wavelet
 clear all
 clc
 tic
@@ -74,7 +72,7 @@ channelPairs = [1 2 3 4]; %1 2 3 4 is the correct configuration
 channelGroups = [channelPairs(1:2); channelPairs(3:4)];
 freqCut = 0.2e9;
 
-colors = ['b', 'r', 'y', 'g'];
+colors = ['y', 'r', 'b', 'g'];
 
 inputImpedance = 50; %Impedance of the oscilloscope in Ohms
 
@@ -224,18 +222,27 @@ nbrOfMeas = size(data, 2);
 
 %% Calculate charge
 
-%Here it could be worthwhile to only integrate the pulse of width
-%2*nRiseTime instead of the whole pulse, trusting that the pedistal
-%subtraction will take care of the noise.
-
-interval = linspace(-1e7, 5e6, 100);
-bins = 100;
 disp('Calculating total charge...')
-eCharge = 1.602e-19;
-charge = squeeze(sum(data))*t / (inputImpedance * eCharge);
+
+[minValues minIndices] = min(data);
+minIndices = squeeze(minIndices);
+
+eCharge = -1.602e-19;
+charge = zeros(nbrOfMeas, channels);
+
+for i = 1:nbrOfMeas
+    for j = 1:channels
+        interval = minIndices(i, j) - nRiseTime : minIndices(i, j) + floor(1.1*nRiseTime);
+        charge(i, j) = sum(data(interval, i, j));
+    end
+end
+
+charge = charge * t / (inputImpedance * eCharge);
 totalCharge = [sum(charge(:, [channelGroups(1, :)]), 2) sum(charge(:, [channelGroups(2, :)]), 2)];
 
 if plotCharges
+    bins = 100;
+    interval = linspace(0, 14e6, 100);
     figure(30)
     clf(30)
     set(gcf, 'Name', 'Individual charge histograms')
@@ -246,10 +253,11 @@ if plotCharges
         title(['Charge deposited on channel ' num2str(channelPairs(j))])
         xlabel('Charge [e]')
         ylabel('Counts')
-        %hist(charge(:, j), interval)
-        hist(charge(:, j), bins)
+        hist(charge(:, j), interval)
+        %hist(charge(:, j), bins)
     end
 
+    interval = linspace(0, 3e7, 100);
     figure(31)
     clf(31)
     set(gcf, 'Name', 'Total charge histograms')
@@ -260,8 +268,8 @@ if plotCharges
         title(['Total charge deposited on channels ' num2str(channelGroups(k, 1)) ' and ' num2str(channelGroups(k, 2))])
         xlabel('Charge [e]')
         ylabel('Counts')
-        %hist(totalCharge(:, k), interval)
-        hist(totalCharge(:, k), bins)
+        hist(totalCharge(:, k), interval)
+        %hist(totalCharge(:, k), bins)
     end
 end
 
@@ -304,8 +312,8 @@ for i = 1:nbrOfMeas
         meas = data(:, i, j);
         [minValue minIndex] = min(meas);
         interval = [minIndex - 2:minIndex + 2];
-        [p, S, mu] = polyfit(T(interval), meas(interval), 2);
-        minT = -p(2)/(2*p(1)) * mu(2) + mu(1);
+        p = polyfit(T(interval), meas(interval), 2);
+        minT = -p(2)/(2*p(1));
         signalIndices(i, j) = minIndex;
         signals(i, j) = minT;
     end
@@ -318,8 +326,8 @@ if plotFittedPeaks
     fineT = linspace(T(interval(1)), T(interval(end)), 100);
     [fittedData delta] = polyval(p, fineT, S, mu);
     plot(fineT, fittedData, 'r')
-    minV = polyval(p, minT, S, mu);
-    plot(minT, polyval(p, minT, S, mu), 'go')
+    minV = polyval(p, minT);
+    plot(minT, polyval(p, minT), 'go')
 end
 
 
@@ -418,11 +426,12 @@ if plotPositions
     set(gcf, 'Name', 'MCP 2D-plot')
     hold on
     suptitle('Reconstruction of particle hits on the MCP')
-    scatter(timeDiff(:, 1), timeDiff(:, 2), 20, mean(totalCharge,2 ), 'filled')
+    scatter(timeDiff(:, 1), timeDiff(:, 2), 20, sum(totalCharge,2 ), 'filled')
     %surf(timeDiff(1, :), timeDiff(2, :), mean(totalCharge(:, :)))
     xlabel('$x\propto \Delta t_x$', 'Interpreter', 'LaTeX');
     ylabel('$y\propto \Delta t_y$', 'Interpreter', 'LaTeX');
     axis square
+    colorbar
 end
 
 
