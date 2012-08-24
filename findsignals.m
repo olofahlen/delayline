@@ -428,10 +428,7 @@ ylabel('$y\propto \Delta t_y$', 'Interpreter', 'LaTeX');
 legend('Short times', 'Long times')
 axis square
 
-<<<<<<< HEAD
-=======
 %%
->>>>>>> 3darray
 toc
 return
 
