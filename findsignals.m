@@ -312,8 +312,8 @@ for i = 1:nbrOfMeas
         meas = data(:, i, j);
         [minValue minIndex] = min(meas);
         interval = [minIndex - 2:minIndex + 2];
-        p = polyfit(T(interval), meas(interval), 2);
-        minT = -p(2)/(2*p(1));
+        [p, S, mu] = polyfit(T(interval), meas(interval), 2);
+        minT = -p(2)/(2*p(1)) * mu(2) + mu(1);
         signalIndices(i, j) = minIndex;
         signals(i, j) = minT;
     end
@@ -326,8 +326,8 @@ if plotFittedPeaks
     fineT = linspace(T(interval(1)), T(interval(end)), 100);
     [fittedData delta] = polyval(p, fineT, S, mu);
     plot(fineT, fittedData, 'r')
-    minV = polyval(p, minT);
-    plot(minT, polyval(p, minT), 'go')
+    minV = polyval(p, minT, S, mu);
+    plot(minT, polyval(p, minT, S, mu), 'go')
 end
 
 
