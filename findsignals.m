@@ -62,6 +62,7 @@ end
 plotOffsets = 1;
 plotFourierTransform = 1;
 plotCharges = 1;
+plotManyPulses = 1;
 plotFittedPeaks = 1;
 plotSignals = 1;
 plotPositions = 1;
@@ -94,7 +95,7 @@ disp('Cleaning with Fourier Transform...')
 if plotFourierTransform
     i = 1;
     j = 1;
-    figure(11)
+    fourierPlot = figure(11);
     clf(11)
     set(gcf, 'Name', 'Signal Fourier Transform')
     suptitle(['Before and after frequency cut at ' num2str(freqCut, '%.2e')])
@@ -140,7 +141,7 @@ end
 disp('Removing offsets and finding bad signals...')
 
 if plotOffsets
-    figure(22)
+    offsetPlot = figure(22);
     clf(22)
     set(gcf, 'Name', 'Signal Offsets')
     suptitle('Before and after removing the offset')
@@ -154,7 +155,7 @@ if plotOffsets
     ylabel('Voltage [V]')
 end
 
-pedestal = mean(data(1:measPerFile/15, :, :));
+pedestal = mean(data(1:floor(measPerFile/15), :, :));
 data = bsxfun(@minus, data, pedestal);
 
 if plotOffsets
@@ -243,7 +244,7 @@ totalCharge = [sum(charge(:, [channelGroups(1, :)]), 2) sum(charge(:, [channelGr
 if plotCharges
     bins = 100;
     interval = linspace(0, 14e6, 100);
-    figure(30)
+    individualChargePlot = figure(30);
     clf(30)
     set(gcf, 'Name', 'Individual charge histograms')
     suptitle('Histograms of charges for the different channels')
@@ -258,7 +259,7 @@ if plotCharges
     end
 
     interval = linspace(0, 3e7, 100);
-    figure(31)
+    totalChargePlot = figure(31);
     clf(31)
     set(gcf, 'Name', 'Total charge histograms')
     suptitle('Histograms of total charge for the two delay lines')
@@ -272,30 +273,81 @@ if plotCharges
         %hist(totalCharge(:, k), bins)
     end
 end
+chargeScatterPlot = figure(32);
+clf(32)
+set(gcf, 'Name', 'Charge scatter plot')
+scatter(totalCharge(:, 1), totalCharge(:, 2))
+xlabel(['Total charge deposited on channels ' num2str(channelGroups(1, 1)) ' and ' num2str(channelGroups(1, 2)) ' [e]'])
+ylabel(['Total charge deposited on channels ' num2str(channelGroups(2, 1)) ' and ' num2str(channelGroups(2, 2)) ' [e]'])
+
+%% Calculate FWHM of pulses
+
+[minVals minIndices] = min(data);
+minVals = squeeze(minVals);
+threshold = minVals / 2;
+longer = zeros(nbrOfMeas, channels);
+longerX = longer;
+loopCounter = 0;
+for j = 1:channels
+    for i = 1:nbrOfMeas
+        longerX(i, j) = find(data(:, i, j) < threshold(i, j), 1, 'first');
+        longer(i, j) = longerX(i, j) + measPerFile*loopCounter;
+        loopCounter = loopCounter + 1;
+    end
+end
+shorter = longer - 1;
+t1 = longerX + 1./(data(longer) - data(shorter)).*(threshold - data(longer));
+
+loopCounter = 0;
+for j = 1:channels
+    for i = 1:nbrOfMeas
+        longerX(i, j) = find(data(:, i, j) < threshold(i, j), 1, 'last') + 1;
+        longer(i, j) = longerX(i, j) + measPerFile*loopCounter;
+        loopCounter = loopCounter + 1;
+    end
+end
+shorter = longer - 1;
+t2 = longerX + 1./(data(longer) - data(shorter)).*(threshold - data(longer));
+fdhm = (t2 - t1)*t;
+
+fwhmHistPlot = figure(35);
+clf(fwhmHistPlot)
+set(gcf, 'Name', 'FDHM of the four channels')
+hold on
+cutFdhm = 1.15e-8;
+suptitle(['Distribution of FDHM. This distribution is cut at ' num2str(cutFdhm) ' s.'])
+for j = 1:channels
+    subplot(4, 1, j)
+    hold on
+    title(['FDHM for channel ' num2str(channelPairs(j))])
+    xlabel('FDHM [s]')
+    ylabel('Counts')
+    hist(fdhm(find(fdhm(:, j) < cutFdhm), j), 200)
+end
 
 %% Calculate pulse shape by averaging. This needs some more work
 
 disp('Calculating mean pulse shape...')
 [foo mins] = min(data);
 mins = squeeze(mins);
-figure(40)
+manyPulsePlot = figure(40);
 clf(40)
 hold on
 title('Pulses overlaid')
-pulseShaper = zeros(2*nRiseTime + 1, size(data, 2), size(data, 3));
+pulseShaper = zeros(4*nRiseTime + 1, size(data, 2), size(data, 3));
 for i = 1:nbrOfMeas
     for j = 1:channels
-        nRange = (mins(i, j) - nRiseTime):(mins(i, j) + nRiseTime);
+        nRange = (mins(i, j) - 2*nRiseTime):(mins(i, j) + 2*nRiseTime);
         %plot(T(nRange), meas(nRange, i))
         pulseShaper(:, i, j) = data(nRange, i, j);
-        if j == 1
+        if j == 1 && fdhm(i, j)
             plot(pulseShaper(:, i, j), colors(mod(i, 4) + 1))
         end
     end
 end
 
 pulse = squeeze(mean(pulseShaper, 2));
-figure(41)
+meanPulsePlot = figure(41);
 clf(41)
 hold on
 title('Mean pulse for channel 1')
@@ -319,7 +371,7 @@ for i = 1:nbrOfMeas
     end
 end
 if plotFittedPeaks
-    figure(400)
+    fittedPeakPlot = figure(400);
     clf(400)
     hold on
     plot(T(interval), meas(interval))
@@ -337,7 +389,7 @@ end
 
 if plotSignals
     disp('Plotting signals...')
-    figure(1)
+    signalPlot = figure(1);
     clf(1)
     set(gcf, 'Name', 'Signal plots')
     suptitle('Delay Line signals')
@@ -373,7 +425,7 @@ disp('Plotting results in histogram and x-y plot...')
 bins = 500;
 
 if plotPositions
-    figure(200)
+    timeSumHistPlot = figure(200);
     clf(200)
     set(gcf, 'Name', 'Normalized histograms of time sums')
     suptitle('Normalized histograms of time sums for the two delay lines')
@@ -404,7 +456,7 @@ disp('Plotting results in histogram and x-y plot...')
 bins = 500;
 
 if plotPositions
-    figure(2)
+    timeDiffHistPlot = figure(2);
     clf(2)
     set(gcf, 'Name', 'Histograms of time differences')
     suptitle('Histograms of time differences for the two delay lines')
@@ -421,13 +473,12 @@ if plotPositions
     ylabel('Counts')
     hist(timeDiff(:, 2), bins)
 
-    figure(4)
+    mcpHitmapPlot = figure(4);
     clf(4)
     set(gcf, 'Name', 'MCP 2D-plot')
     hold on
     suptitle('Reconstruction of particle hits on the MCP')
     scatter(timeDiff(:, 1), timeDiff(:, 2), 20, sum(totalCharge,2 ), 'filled')
-    %surf(timeDiff(1, :), timeDiff(2, :), mean(totalCharge(:, :)))
     xlabel('$x\propto \Delta t_x$', 'Interpreter', 'LaTeX');
     ylabel('$y\propto \Delta t_y$', 'Interpreter', 'LaTeX');
     axis square
@@ -444,7 +495,7 @@ cut2 = 9.6e-8;
 less2 = find(timeSum(:, 2) < cut2);
 more2 = find(timeSum(:, 2) > cut2);
 
-figure(301)
+timeCutHitmapPlot = figure(301);
 clf(301)
 hold on
 set(gcf, 'Name', 'MCP 2D-plot with time cuts')
