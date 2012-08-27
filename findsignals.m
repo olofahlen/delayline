@@ -556,3 +556,20 @@ if i >= 1
 else
     disp('Could not find event.')
 end
+
+%% Save figures
+
+%jjfigures = [fourierPlot, offsetPlot, individualChargePlot]
+figures = {'fourierPlot', 'offsetPlot', 'individualChargePlot', 'totalChargePlot', 'chargeScatterPlot', 'fwhmHistPlot', 'manyPulsePlot', 'meanPulsePlot', 'fittedPeakPlot', 'signalPlot', 'timeSumHistPlot', 'timeDiffHistPlot', 'mcpHitmapPlot', 'timeCutHitmapPlot'};
+formats = {'png', 'eps', 'fig', 'pdf'};
+path = '/home/thorleif/mcp/tests/pics/matlab/'
+
+for k = 1:length(figures)
+    figureName = figures{k};
+    for l = 1:length(formats)
+        format = formats{l};
+        fileName = [figureName '.' format];
+        disp(['Saving ' fileName '...'])
+        saveas(eval(figureName), [path fileName], format)
+    end
+end
