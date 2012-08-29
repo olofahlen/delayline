@@ -91,57 +91,7 @@ fZeroMask = zeros(2*fCutLength, size(data, 2), size(data, 3));
 riseTime = 1e-8;
 nRiseTime = floor(riseTime/t);
 
-%% Clean signals from noise using the Fourier Transform
-
-disp('Cleaning with Fourier Transform...')
-
-if plotFourierTransform
-    i = 1;
-    j = 1;
-    fourierPlot = figure(11);
-    clf(11)
-    set(gcf, 'Name', 'Signal Fourier Transform')
-    hold on
-    subplot(2, 2, 1)
-    hold on
-    title('Before low pass')
-    xlabel('Time [s]')
-    ylabel('Voltage [V]')
-    plot(T, data(:, i, j))
-end
-
-%Memory may be saved here by overwriting the data-variable instead of
-%creating a new variable (DATA).
-DATA = fft(data)/L;
-if plotFourierTransform
-    subplot(2, 2, 2)
-    semilogy(f, 2*abs(DATA(1:L/2+1, i, j))) 
-    hold on
-    title('Uncut Fourier spectrum')
-    xlabel('Frequency (Hz)')
-    ylabel('Fourier transform [Vs]')
-end
-DATA(L/2 - fCutLength + 1:L/2 + fCutLength, :, :) = fZeroMask;
-data = real(ifft(DATA))*L;
-if plotFourierTransform
-    subplot(2, 2, 3)
-    hold on
-    title('After low pass')
-    xlabel('Time [s]')
-    ylabel('Voltage [V]')
-    plot(T, data(:, i, j));
-    subplot(2, 2, 4)
-    semilogy(f, 2*abs(DATA(1:L/2+1, i, j))) 
-    hold on
-    title('Cut Fourier spectrum')
-    xlabel('Frequency (Hz)')
-    ylabel('Fourier transform [Vs]')
-    suptitle(['Before and after frequency cut at ' num2str(freqCut, '%.2e')])
-end
-
-%% Remove Offsets and filter out bad measurements
-
-disp('Removing offsets and finding bad signals...')
+%% Remove offsets
 
 if plotOffsets
     offsetPlot = figure(22);
@@ -172,7 +122,59 @@ if plotOffsets
     xlabel('Time [s]')
     ylabel('Voltage [V]')
 end
-    
+
+%% Clean signals from noise using the Fourier Transform
+
+disp('Cleaning with Fourier Transform...')
+
+if plotFourierTransform
+    fourierPlot = figure(11);
+    clf(11)
+    set(gcf, 'Name', 'Signal Fourier Transform')
+    hold on
+    subplot(2, 2, 1)
+    hold on
+    title('Before low pass')
+    xlabel('Time [s]')
+    ylabel('Voltage [V]')
+    plot(T, data(:, chosenSignal, chosenChannel))
+end
+
+%Memory may be saved here by overwriting the data-variable instead of
+%creating a new variable (DATA).
+DATA = fft(data)/L;
+if plotFourierTransform
+    subplot(2, 2, 2)
+    semilogy(f, 2*abs(DATA(1:L/2+1, i, j))) 
+    hold on
+    title('Uncut Fourier spectrum')
+    xlabel('Frequency (Hz)')
+    ylabel('Fourier transform [Vs]')
+end
+%DATA(L/2 - fCutLength + 1:L/2 + fCutLength, :, :) = fZeroMask;
+%data = real(ifft(DATA))*L;
+sc = t/4e-9;
+data = filter(sc, [1 sc-1], data);
+DATA = fft(data)/L;
+if plotFourierTransform
+    subplot(2, 2, 3)
+    hold on
+    title('After low pass')
+    xlabel('Time [s]')
+    ylabel('Voltage [V]')
+    plot(T, data(:, chosenSignal, chosenChannel));
+    subplot(2, 2, 4)
+    semilogy(f, 2*abs(DATA(1:L/2+1, i, j))) 
+    hold on
+    title('Cut Fourier spectrum')
+    xlabel('Frequency (Hz)')
+    ylabel('Fourier transform [Vs]')
+    suptitle(['Before and after frequency cut at ' num2str(freqCut, '%.2e')])
+end
+
+%% Filter out bad measurements
+
+disp('Removing offsets and finding bad signals...')
 
 good = ones(size(data, 2), 1);
 
