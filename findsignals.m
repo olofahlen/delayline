@@ -67,6 +67,9 @@ plotFittedPeaks = 1;
 plotSignals = 1;
 plotPositions = 1;
 
+chosenChannel = 1;
+chosenSignal = 1;
+
 %% Post Loading
 
 channelPairs = [1 2 3 4]; %1 2 3 4 is the correct configuration
@@ -98,7 +101,6 @@ if plotFourierTransform
     fourierPlot = figure(11);
     clf(11)
     set(gcf, 'Name', 'Signal Fourier Transform')
-    suptitle(['Before and after frequency cut at ' num2str(freqCut, '%.2e')])
     hold on
     subplot(2, 2, 1)
     hold on
@@ -113,11 +115,11 @@ end
 DATA = fft(data)/L;
 if plotFourierTransform
     subplot(2, 2, 2)
+    semilogy(f, 2*abs(DATA(1:L/2+1, i, j))) 
     hold on
     title('Uncut Fourier spectrum')
     xlabel('Frequency (Hz)')
     ylabel('Fourier transform [Vs]')
-    plot(f, 2*abs(DATA(1:L/2+1, i, j))) 
 end
 DATA(L/2 - fCutLength + 1:L/2 + fCutLength, :, :) = fZeroMask;
 data = real(ifft(DATA))*L;
@@ -129,11 +131,12 @@ if plotFourierTransform
     ylabel('Voltage [V]')
     plot(T, data(:, i, j));
     subplot(2, 2, 4)
+    semilogy(f, 2*abs(DATA(1:L/2+1, i, j))) 
     hold on
     title('Cut Fourier spectrum')
     xlabel('Frequency (Hz)')
     ylabel('Fourier transform [Vs]')
-    plot(f, 2*abs(DATA(1:L/2+1, i, j))) 
+    suptitle(['Before and after frequency cut at ' num2str(freqCut, '%.2e')])
 end
 
 %% Remove Offsets and filter out bad measurements
@@ -144,7 +147,6 @@ if plotOffsets
     offsetPlot = figure(22);
     clf(22)
     set(gcf, 'Name', 'Signal Offsets')
-    suptitle('Before and after removing the offset')
     subplot(2, 1, 1)
     hold on
     title('Before removing offset')
@@ -221,6 +223,10 @@ disp(['Found ' num2str(nbrOfMeas - nbrOfGoods) ' bad signals from time sum. Remo
 data = data(:, find(good == 1), :);
 nbrOfMeas = size(data, 2);
 
+if plotOffsets
+    suptitle('Before and after removing the offset')
+end
+
 %% Calculate charge
 
 disp('Calculating total charge...')
@@ -247,7 +253,6 @@ if plotCharges
     individualChargePlot = figure(30);
     clf(30)
     set(gcf, 'Name', 'Individual charge histograms')
-    suptitle('Histograms of charges for the different channels')
     for j = 1:channels
         subplot(4, 1, j)
         hold on
@@ -273,14 +278,17 @@ if plotCharges
         %hist(totalCharge(:, k), bins)
     end
 end
-chargeScatterPlot = figure(32);
-clf(32)
-set(gcf, 'Name', 'Charge scatter plot')
-scatter(totalCharge(:, 1), totalCharge(:, 2))
-xlabel(['Total charge deposited on channels ' num2str(channelGroups(1, 1)) ' and ' num2str(channelGroups(1, 2)) ' [e]'])
-ylabel(['Total charge deposited on channels ' num2str(channelGroups(2, 1)) ' and ' num2str(channelGroups(2, 2)) ' [e]'])
+if plotCharges
+    suptitle('Histograms of charges for the different channels')
+    chargeScatterPlot = figure(32);
+    clf(32)
+    set(gcf, 'Name', 'Charge scatter plot')
+    scatter(totalCharge(:, 1), totalCharge(:, 2))
+    xlabel(['Total charge deposited on channels ' num2str(channelGroups(1, 1)) ' and ' num2str(channelGroups(1, 2)) ' [e]'])
+    ylabel(['Total charge deposited on channels ' num2str(channelGroups(2, 1)) ' and ' num2str(channelGroups(2, 2)) ' [e]'])
+end
 
-%% Calculate FWHM of pulses
+%% Calculate FDHM of pulses. Good idea to check the code below...
 
 [minVals minIndices] = min(data);
 minVals = squeeze(minVals);
@@ -310,12 +318,11 @@ shorter = longer - 1;
 t2 = longerX + 1./(data(longer) - data(shorter)).*(threshold - data(longer));
 fdhm = (t2 - t1)*t;
 
-fwhmHistPlot = figure(35);
-clf(fwhmHistPlot)
+fdhmHistPlot = figure(35);
+clf(fdhmHistPlot)
 set(gcf, 'Name', 'FDHM of the four channels')
 hold on
 cutFdhm = 1.15e-8;
-suptitle(['Distribution of FDHM. This distribution is cut at ' num2str(cutFdhm) ' s.'])
 for j = 1:channels
     subplot(4, 1, j)
     hold on
@@ -324,34 +331,41 @@ for j = 1:channels
     ylabel('Counts')
     hist(fdhm(find(fdhm(:, j) < cutFdhm), j), 200)
 end
+suptitle(['Distribution of FDHM. This distribution is cut at ' num2str(cutFdhm) ' s.'])
 
-%% Calculate pulse shape by averaging. This needs some more work
+%% Calculate pulse shape by averaging. This needs some more work, like cutting from the histogram fdhmHistPlot
 
 disp('Calculating mean pulse shape...')
 [foo mins] = min(data);
 mins = squeeze(mins);
-manyPulsePlot = figure(40);
+meanPulsePlot = figure(40);
 clf(40)
+set(gcf, 'Name', 'Mean pulse calculation')
+subplot(1, 2, 1)
+xlabel('Shifted time indices')
+ylabel('Voltage [V]')
 hold on
-title('Pulses overlaid')
+title(['Pulses from channel ' num2str(chosenChannel) ' overlaid'])
 pulseShaper = zeros(4*nRiseTime + 1, size(data, 2), size(data, 3));
 for i = 1:nbrOfMeas
     for j = 1:channels
         nRange = (mins(i, j) - 2*nRiseTime):(mins(i, j) + 2*nRiseTime);
         %plot(T(nRange), meas(nRange, i))
         pulseShaper(:, i, j) = data(nRange, i, j);
-        if j == 1 && fdhm(i, j)
+        if j == chosenChannel
             plot(pulseShaper(:, i, j), colors(mod(i, 4) + 1))
         end
     end
 end
 
 pulse = squeeze(mean(pulseShaper, 2));
-meanPulsePlot = figure(41);
-clf(41)
+subplot(1, 2, 2)
 hold on
-title('Mean pulse for channel 1')
+title(['Mean pulse for channel ' num2str(chosenChannel)])
+xlabel('Shifted time indices')
+ylabel('Voltage [V]')
 plot(pulse(:, 1))
+suptitle('Calculation of the average pulse')
 
 %% Locate peaks
 
@@ -370,16 +384,21 @@ for i = 1:nbrOfMeas
         signals(i, j) = minT;
     end
 end
+
 if plotFittedPeaks
     fittedPeakPlot = figure(400);
     clf(400)
+    set(gcf, 'Name', 'Fitting parabola')
     hold on
+    title('Fitting of a parbola to find the true minimum')
     plot(T(interval), meas(interval))
     fineT = linspace(T(interval(1)), T(interval(end)), 100);
     [fittedData delta] = polyval(p, fineT, S, mu);
     plot(fineT, fittedData, 'r')
     minV = polyval(p, minT, S, mu);
-    plot(minT, polyval(p, minT, S, mu), 'go')
+    plot(minT, polyval(p, minT, S, mu), 'g*')
+    xlabel('Time [s]')
+    ylabel('Voltage [V]')
 end
 
 
@@ -392,25 +411,25 @@ if plotSignals
     signalPlot = figure(1);
     clf(1)
     set(gcf, 'Name', 'Signal plots')
-    suptitle('Delay Line signals')
     pic = 1;
-    for i = 1:1
+    for i = chosenSignal:chosenSignal
         for j = 1:channels
             color = colors(j);
-            meas = data(:, i, channelPairs(j));
+            meas = data(:, i, channelPairs(j));j
             subplot(2, 1, ceil(j/2));
             hold on
-            title('Delay Line signals')
+            title(['Channels ' num2str(channelGroups(ceil(j/2), 1)) ' and ' num2str(channelGroups(ceil(j/2), 2))])
             xlabel('Time [s]')
             ylabel('Voltage [V]')
             plot(T, meas, color)
             plot(T(signalIndices(i, channelPairs(j))), meas(signalIndices(i, channelPairs(j))), 'o')
-            %The y-value in the followin plot is not exact
+            %The y-value in the following plot is not exact
             plot(signals(i, j), meas(signalIndices(i, channelPairs(j))), '*')
         end
         %pause
         %clf(1)
     end
+    suptitle('Delay Line signals')
 end
 
 %% Calculate total time
@@ -428,7 +447,6 @@ if plotPositions
     timeSumHistPlot = figure(200);
     clf(200)
     set(gcf, 'Name', 'Normalized histograms of time sums')
-    suptitle('Normalized histograms of time sums for the two delay lines')
     for k = 1:2
         subplot(2, 1, k)
         hold on
@@ -440,6 +458,7 @@ if plotPositions
         tStd = std(timeSum(:, k));
         plot(no, normpdf(no, tMean, tStd), 'r')
     end
+    suptitle('Normalized histograms of time sums for the two delay lines')
 end
 
 %% Calculate positions
@@ -459,7 +478,6 @@ if plotPositions
     timeDiffHistPlot = figure(2);
     clf(2)
     set(gcf, 'Name', 'Histograms of time differences')
-    suptitle('Histograms of time differences for the two delay lines')
     subplot(2, 1, 1)
     hold on
     title(['Delayline for channels ' num2str(channelPairs(1)) ' and ' num2str(channelPairs(2))])
@@ -472,6 +490,7 @@ if plotPositions
     xlabel('$\Delta t$ [s]', 'Interpreter', 'LaTeX')
     ylabel('Counts')
     hist(timeDiff(:, 2), bins)
+    suptitle('Histograms of time differences for the two delay lines')
 
     mcpHitmapPlot = figure(4);
     clf(4)
@@ -482,7 +501,8 @@ if plotPositions
     xlabel('$x\propto \Delta t_x$', 'Interpreter', 'LaTeX');
     ylabel('$y\propto \Delta t_y$', 'Interpreter', 'LaTeX');
     axis square
-    colorbar
+    cb = colorbar;
+    ylabel(cb, 'Charge [e]')
 end
 
 
@@ -499,11 +519,10 @@ timeCutHitmapPlot = figure(301);
 clf(301)
 hold on
 set(gcf, 'Name', 'MCP 2D-plot with time cuts')
-suptitle('Events cut in time histograms')
 
 subplot(1, 2, 1)
 hold on
-title(['Events cut at ' num2str(cut1) 's in time histogram for channels ' num2str(channelGroups(1, 1)) ' and ' num2str(channelGroups(1, 2))])
+title(['Cut at ' num2str(cut1) 's for channels ' num2str(channelGroups(1, 1)) ' and ' num2str(channelGroups(1, 2))])
 scatter(timeDiff(less1, 1), timeDiff(less1, 2), 'b')
 scatter(timeDiff(more1, 1), timeDiff(more1, 2), 'r')
 xlabel('$x\propto \Delta t_x$', 'Interpreter', 'LaTeX');
@@ -513,13 +532,14 @@ axis square
 
 subplot(1, 2, 2)
 hold on
-title(['Events cut at ' num2str(cut2) 's in time histogram for channels ' num2str(channelGroups(2, 1)) ' and ' num2str(channelGroups(2, 2))])
+title(['Cut at ' num2str(cut2) 's for channels ' num2str(channelGroups(2, 1)) ' and ' num2str(channelGroups(2, 2))])
 scatter(timeDiff(less2, 1), timeDiff(less2, 2), 'b')
 scatter(timeDiff(more2, 1), timeDiff(more2, 2), 'r')
 xlabel('$x\propto \Delta t_x$', 'Interpreter', 'LaTeX');
 ylabel('$y\propto \Delta t_y$', 'Interpreter', 'LaTeX');
 legend('Short times', 'Long times')
 axis square
+suptitle('Events cut in time histograms')
 
 %%
 toc
@@ -541,7 +561,6 @@ if i >= 1
     figure(1000)
     clf(1000)
     set(gcf, 'Name', 'Single event plot')
-    suptitle('Delay Line signals')
     for j = 1:channels
     color = colors(j);
         meas = data((1:measPerFile) + (measPerFile * (channelPairs(j) - 1)), i);
@@ -553,23 +572,22 @@ if i >= 1
         plot(T, meas, color)
         plot(T(signalIndices(channelPairs(j), i)), meas(signalIndices(channelPairs(j), i)), 'o')
     end
+    suptitle('Delay Line signals')
 else
     disp('Could not find event.')
 end
 
 %% Save figures
 
-%jjfigures = [fourierPlot, offsetPlot, individualChargePlot]
-figures = {'fourierPlot', 'offsetPlot', 'individualChargePlot', 'totalChargePlot', 'chargeScatterPlot', 'fwhmHistPlot', 'manyPulsePlot', 'meanPulsePlot', 'fittedPeakPlot', 'signalPlot', 'timeSumHistPlot', 'timeDiffHistPlot', 'mcpHitmapPlot', 'timeCutHitmapPlot'};
-formats = {'png', 'eps', 'fig', 'pdf'};
-path = '/home/thorleif/mcp/tests/pics/matlab/'
+figures = {'fourierPlot', 'offsetPlot', 'individualChargePlot', 'totalChargePlot', 'chargeScatterPlot', 'fdhmHistPlot', 'meanPulsePlot', 'fittedPeakPlot', 'signalPlot', 'timeSumHistPlot', 'timeDiffHistPlot', 'mcpHitmapPlot', 'timeCutHitmapPlot'};
+formats = {'png', 'epsc', 'fig', 'pdf'};
+path = '/home/thorleif/mcp/tests/pics/matlab/';
 
 for k = 1:length(figures)
     figureName = figures{k};
     for l = 1:length(formats)
         format = formats{l};
-        fileName = [figureName '.' format];
-        disp(['Saving ' fileName '...'])
-        saveas(eval(figureName), [path fileName], format)
+        disp(['Saving ' figureName ' as ' format '...'])
+        saveas(eval(figureName), [path figureName], format)
     end
 end
