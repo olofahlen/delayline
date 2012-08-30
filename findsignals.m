@@ -121,9 +121,10 @@ if plotOffsets
     end
     xlabel('Time [s]')
     ylabel('Voltage [V]')
+    suptitle('Before and after removing the offset')
 end
 
-%% Clean signals from noise using the Fourier Transform
+%% Clean signals from noise with low pass filters
 
 disp('Cleaning with Fourier Transform...')
 
@@ -172,9 +173,9 @@ if plotFourierTransform
     suptitle(['Before and after frequency cut at ' num2str(freqCut, '%.2e')])
 end
 
-%% Filter out bad measurements
+%% Remove bad signals by shape
 
-disp('Removing offsets and finding bad signals...')
+disp('Removing bad signals by shape...')
 
 good = ones(size(data, 2), 1);
 
@@ -209,14 +210,49 @@ data = data(:, goods, :);
 nbrOfMeas = size(data, 2);
 good = ones(size(data, 2), 1);
 
-[minValues minIndices] = min(data);
-minIndices = squeeze(minIndices);
-tTot = T(minIndices(:, [channelGroups(1, 1) channelGroups(2, 1)])) + T(minIndices(:, [channelGroups(1, 2) channelGroups(2, 2)]));
-tMean = mean(tTot);
-tStd = std(tTot);
+%% Locate peaks
+
+disp('Locating peaks...')
+signalIndices = zeros(nbrOfMeas, 4);
+signals = zeros(nbrOfMeas, 4);
+
+for i = 1:nbrOfMeas
+    for j = 1:channels
+        meas = data(:, i, j);
+        [minValue minIndex] = min(meas);
+        interval = [minIndex - 2:minIndex + 2];
+        [p, S, mu] = polyfit(T(interval), meas(interval), 2);
+        minT = -p(2)/(2*p(1)) * mu(2) + mu(1);
+        signalIndices(i, j) = minIndex;
+        signals(i, j) = minT;
+    end
+end
+
+if plotFittedPeaks
+    fittedPeakPlot = figure(400);
+    clf(400)
+    set(gcf, 'Name', 'Fitting parabola')
+    hold on
+    title('Fitting of a parbola to find the true minimum')
+    plot(T(interval), meas(interval))
+    fineT = linspace(T(interval(1)), T(interval(end)), 100);
+    [fittedData delta] = polyval(p, fineT, S, mu);
+    plot(fineT, fittedData, 'r')
+    minV = polyval(p, minT, S, mu);
+    plot(minT, polyval(p, minT, S, mu), 'g*')
+    xlabel('Time [s]')
+    ylabel('Voltage [V]')
+end
+
+
+%% Remove bad signals from time sum
+
+timeSum = [sum(signals(:, channelGroups(1, :)), 2) sum(signals(:, channelGroups(2, :)), 2)];
+tMean = mean(timeSum);
+tStd = std(timeSum);
 
 for k = 1:channels/2
-    [row col] = find(abs([tTot(:, k) - tMean(k)]) > 3*tStd(k));
+    [row col] = find(abs([timeSum(:, k) - tMean(k)]) > 3*tStd(k));
     good(row) = 0;
 end
 
@@ -224,10 +260,8 @@ nbrOfGoods = length(find(good == 1));
 disp(['Found ' num2str(nbrOfMeas - nbrOfGoods) ' bad signals from time sum. Removing...'])
 data = data(:, find(good == 1), :);
 nbrOfMeas = size(data, 2);
-
-if plotOffsets
-    suptitle('Before and after removing the offset')
-end
+signals = signals(find(good == 1), :);
+signalIndices = signalIndices(find(good == 1), :);
 
 %% Calculate charge
 
@@ -248,10 +282,11 @@ end
 
 charge = charge * t / (inputImpedance * eCharge);
 totalCharge = [sum(charge(:, [channelGroups(1, :)]), 2) sum(charge(:, [channelGroups(2, :)]), 2)];
+grandTotalCharge = sum(totalCharge, 2);
 
 if plotCharges
     bins = 100;
-    interval = linspace(0, 14e6, 100);
+    interval = linspace(0, 14e6, bins);
     individualChargePlot = figure(30);
     clf(30)
     set(gcf, 'Name', 'Individual charge histograms')
@@ -271,7 +306,7 @@ if plotCharges
     set(gcf, 'Name', 'Total charge histograms')
     suptitle('Histograms of total charge for the two delay lines')
     for k = 1:2
-        subplot(2, 1, k)
+        subplot(3, 1, k)
         hold on
         title(['Total charge deposited on channels ' num2str(channelGroups(k, 1)) ' and ' num2str(channelGroups(k, 2))])
         xlabel('Charge [e]')
@@ -279,6 +314,11 @@ if plotCharges
         hist(totalCharge(:, k), interval)
         %hist(totalCharge(:, k), bins)
     end
+    subplot(3, 1, 3)
+    hist(grandTotalCharge, bins)
+    title(['Total charge deposited both delay lines'])
+    xlabel('Charge [e]')
+    ylabel('Counts')
 end
 if plotCharges
     suptitle('Histograms of charges for the different channels')
@@ -291,6 +331,8 @@ if plotCharges
 end
 
 %% Calculate FDHM of pulses. Good idea to check the code below...
+
+disp('Calculating FDHM for the pulses...')
 
 [minVals minIndices] = min(data);
 minVals = squeeze(minVals);
@@ -324,14 +366,18 @@ fdhmHistPlot = figure(35);
 clf(fdhmHistPlot)
 set(gcf, 'Name', 'FDHM of the four channels')
 hold on
-cutFdhm = 1.15e-8;
+cutFdhm = 20e-9;
+
+binX = linspace(0, cutFdhm, 300);
 for j = 1:channels
     subplot(4, 1, j)
     hold on
     title(['FDHM for channel ' num2str(channelPairs(j))])
     xlabel('FDHM [s]')
     ylabel('Counts')
-    hist(fdhm(find(fdhm(:, j) < cutFdhm), j), 200)
+    hist(fdhm(:, j), binX)
+    axis([0 cutFdhm + 2e-9 0 1])
+    axis 'auto y'
 end
 suptitle(['Distribution of FDHM. This distribution is cut at ' num2str(cutFdhm) ' s.'])
 
@@ -369,40 +415,6 @@ ylabel('Voltage [V]')
 plot(pulse(:, 1))
 suptitle('Calculation of the average pulse')
 
-%% Locate peaks
-
-disp('Locating peaks...')
-signalIndices = zeros(nbrOfMeas, 4);
-signals = zeros(nbrOfMeas, 4);
-
-for i = 1:nbrOfMeas
-    for j = 1:channels
-        meas = data(:, i, j);
-        [minValue minIndex] = min(meas);
-        interval = [minIndex - 2:minIndex + 2];
-        [p, S, mu] = polyfit(T(interval), meas(interval), 2);
-        minT = -p(2)/(2*p(1)) * mu(2) + mu(1);
-        signalIndices(i, j) = minIndex;
-        signals(i, j) = minT;
-    end
-end
-
-if plotFittedPeaks
-    fittedPeakPlot = figure(400);
-    clf(400)
-    set(gcf, 'Name', 'Fitting parabola')
-    hold on
-    title('Fitting of a parbola to find the true minimum')
-    plot(T(interval), meas(interval))
-    fineT = linspace(T(interval(1)), T(interval(end)), 100);
-    [fittedData delta] = polyval(p, fineT, S, mu);
-    plot(fineT, fittedData, 'r')
-    minV = polyval(p, minT, S, mu);
-    plot(minT, polyval(p, minT, S, mu), 'g*')
-    xlabel('Time [s]')
-    ylabel('Voltage [V]')
-end
-
 
 %% Plot signals
 
@@ -437,13 +449,12 @@ end
 %% Calculate total time
 
 disp('Calculating sums of times...')
-timeSum = zeros(nbrOfMeas, 2);
 
 %timeSum = [sum(signalIndices(:, channelGroups(1, :)), 2) sum(signalIndices(:, channelGroups(2, :)), 2)];
 timeSum = [sum(signals(:, channelGroups(1, :)), 2) sum(signals(:, channelGroups(2, :)), 2)];
 
 disp('Plotting results in histogram and x-y plot...')
-bins = 500;
+bins = 150;
 
 if plotPositions
     timeSumHistPlot = figure(200);
@@ -455,10 +466,42 @@ if plotPositions
         title(['Delayline for channels ' num2str(channelGroups(k, 1)) ' and ' num2str(channelGroups(k, 2))])
         xlabel('$t_1 + t_2$ [s]', 'Interpreter', 'LaTeX')
         ylabel('Normalized counts')
-        [xo, no] = histnorm(timeSum(:, k), bins, 'plot');
-        tMean = mean(timeSum(:, k));
-        tStd = std(timeSum(:, k));
-        plot(no, normpdf(no, tMean, tStd), 'r')
+        [y, x] = histnorm(timeSum(:, k), bins, 'plot');
+        %tMean = mean(timeSum(:, k));
+        %tStd = std(timeSum(:, k));
+        %plot(x, normpdf(x, tMean, tStd), 'r')
+        [peakMax peakIndex] = max(y);
+        guessMu1 = x(peakIndex);
+        halfPeakIndex = find(y>peakMax/2, 1, 'first');
+        lowerMu1 = x(halfPeakIndex);
+        guessSigma = guessMu1 - lowerMu1;
+        upperMu1 = lowerMu1 + 2*guessSigma;
+        upperSigma = guessMu1 - x(find(y>peakMax/4, 1, 'first'));
+        lowerSigma = guessMu1 - x(find(y>peakMax*3/4, 1, 'first'));
+        guessMu2 = x(end-peakIndex);
+        lowerMu2 = lowerMu1 + guessMu2 - guessMu1;
+        upperMu2 = upperMu1 + guessMu2 - guessMu1;
+
+    	lower = [0 lowerMu1 lowerSigma lowerMu2 lowerSigma];
+    	upper = [1 upperMu1 upperSigma upperMu2 upperSigma];
+    	start = [0 guessMu1 guessSigma guessMu2 guessSigma];
+
+        s = fitoptions('Method','NonlinearLeastSquares', 'Lower',lower, 'Upper',upper, 'Startpoint',start);
+        f = fittype('a*normpdf(x, mu1, sigma1) + (1-a)*normpdf(x, mu2, sigma2)', 'coeff', {'a', 'mu1', 'sigma1', 'mu2', 'sigma2'}, 'options', s);
+        %f = fittype('normpdf(x, mu, sigma)', 'options', s);
+
+        %g = fittype('a*normpdf(x, mu1, sigma1) + b*normpdf(x, mu2, sigma2)', 'coeff', {'a', 'mu1', 'sigma1', 'b', 'mu2', 'sigma2'});
+        %s = fitoptions('Startpoint', [0.5 96e-9 4e-9 0.5 98e-9 4e-9])
+        %g = fittype('a*normpdf(x, mu1, sigma1) + b*normpdf(x, mu2, sigma2)', 'options')
+        fittedGaussian = fit(x', y', f);
+        fitPlot = plot(x, fittedGaussian(x), 'r');
+        h = legend(fitPlot, '$a\cdot N(\mu_1, \sigma_1) + (1-a)\cdot N(\mu_2, sigma_2)$');
+        set(h, 'Interpreter', 'LaTeX')
+        plot([lowerMu1 guessMu1 upperMu1], [peakMax peakMax peakMax], 'og-')
+        plot([lowerMu2 guessMu2 upperMu2], [peakMax peakMax peakMax], 'og-')
+        plot([0 -lowerSigma -guessSigma -upperSigma]+guessMu1, [peakMax peakMax peakMax peakMax]/2, 'og-')
+        plot([0 -lowerSigma -guessSigma -upperSigma]+guessMu2, [peakMax peakMax peakMax peakMax]/2, 'og-')
+
     end
     suptitle('Normalized histograms of time sums for the two delay lines')
 end
@@ -509,38 +552,29 @@ end
 
 
 %% Select the events corresponding to the left and right peaks of the time sums
-cut1 = 9.16e-8;
-less1 = find(timeSum(:, 1) < cut1);
-more1 = find(timeSum(:, 1) > cut1);
-
-cut2 = 9.6e-8;
-less2 = find(timeSum(:, 2) < cut2);
-more2 = find(timeSum(:, 2) > cut2);
 
 timeCutHitmapPlot = figure(301);
 clf(301)
 hold on
 set(gcf, 'Name', 'MCP 2D-plot with time cuts')
 
-subplot(1, 2, 1)
-hold on
-title(['Cut at ' num2str(cut1) 's for channels ' num2str(channelGroups(1, 1)) ' and ' num2str(channelGroups(1, 2))])
-scatter(timeDiff(less1, 1), timeDiff(less1, 2), 'b')
-scatter(timeDiff(more1, 1), timeDiff(more1, 2), 'r')
-xlabel('$x\propto \Delta t_x$', 'Interpreter', 'LaTeX');
-ylabel('$y\propto \Delta t_y$', 'Interpreter', 'LaTeX');
-legend('Short times', 'Long times')
-axis square
+cuts = [9.68e-8 1.011e-7];
 
-subplot(1, 2, 2)
-hold on
-title(['Cut at ' num2str(cut2) 's for channels ' num2str(channelGroups(2, 1)) ' and ' num2str(channelGroups(2, 2))])
-scatter(timeDiff(less2, 1), timeDiff(less2, 2), 'b')
-scatter(timeDiff(more2, 1), timeDiff(more2, 2), 'r')
-xlabel('$x\propto \Delta t_x$', 'Interpreter', 'LaTeX');
-ylabel('$y\propto \Delta t_y$', 'Interpreter', 'LaTeX');
-legend('Short times', 'Long times')
-axis square
+for k = 1:2
+    less = find(timeSum(:, k) < cuts(k));
+    more = find(timeSum(:, k) > cuts(k));
+
+    subplot(1, 2, k)
+    hold on
+    title(['Cut at ' num2str(cut) 's for channels ' num2str(channelGroups(k, 1)) ' and ' num2str(channelGroups(k, 2))])
+    scatter(timeDiff(less, 1), timeDiff(less, 2), 'b')
+    scatter(timeDiff(more, 1), timeDiff(more, 2), 'r')
+    xlabel('$x\propto \Delta t_x$', 'Interpreter', 'LaTeX');
+    ylabel('$y\propto \Delta t_y$', 'Interpreter', 'LaTeX');
+    legend('Short times', 'Long times')
+    axis square
+end
+
 suptitle('Events cut in time histograms')
 
 %%
