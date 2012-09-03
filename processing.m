@@ -63,11 +63,8 @@ end
 %% Settings
 plotOffsets = 1;
 plotFourierTransform = 1;
-plotCharges = 1;
 plotMeanPulse = 1;
 plotFittedPeaks = 1;
-plotSignals = 1;
-plotPositions = 1;
 
 chosenChannel = 1;
 chosenSignal = 1;
@@ -92,6 +89,7 @@ nRiseTime = floor(riseTime/t);
 
 %% Remove offsets
 
+disp('Removing offsets...')
 if plotOffsets
     offsetPlot = figure(22);
     clf(22)
@@ -125,7 +123,7 @@ end
 
 %% Clean signals from noise with low pass filters
 
-disp('Cleaning with Fourier Transform...')
+disp('Cleaning with low pass filters...')
 
 if plotFourierTransform
     meas = data(:, chosenSignal, chosenChannel);
@@ -208,7 +206,7 @@ good = ones(size(data, 2), 1);
 
 %% Locate peaks
 
-disp('Locating peaks...')
+disp('Locating peaks by minimum of fitted quadratic...')
 signalIndices = zeros(nbrOfMeas, 4);
 signals = zeros(nbrOfMeas, 4);
 
@@ -241,6 +239,7 @@ end
 
 %% Remove bad signals from time sum
 
+disp('Removing bad signals from time sum...')
 timeSum = [sum(signals(:, channelGroups(1, :)), 2) sum(signals(:, channelGroups(2, :)), 2)];
 tMean = mean(timeSum);
 tStd = std(timeSum);
@@ -349,7 +348,7 @@ end
 
 %% Calculate total time and fit double Gaussian
 
-disp('Calculating sums of times...')
+disp('Calculating sums of times and fitting double Gaussian...')
 
 timeMinSum = [sum(signalIndices(:, channelGroups(1, :)), 2) sum(signalIndices(:, channelGroups(2, :)), 2)];
 timeSum = [sum(signals(:, channelGroups(1, :)), 2) sum(signals(:, channelGroups(2, :)), 2)];

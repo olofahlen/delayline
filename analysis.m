@@ -3,10 +3,11 @@ plotFdhm = true;
 plotSignals = true;
 plotTimeSums = true;
 plotPositions = true;
-
+plotTimeCutHitmap = true;
 
 %% Plot histograms with charges
 if plotCharges
+    disp('Plotting charges...')
     bins = 100;
     interval = linspace(0, 14e6, bins);
     individualChargePlot = figure(30);
@@ -55,6 +56,7 @@ end
 
 %% Plot histograms for FDHM
 if plotFdhm
+    disp('Plptting FDHM histograms...')
     fdhmHistPlot = figure(35);
     clf(fdhmHistPlot)
     set(gcf, 'Name', 'FDHM of the four channels')
@@ -108,6 +110,7 @@ end
 
 %%  Plot histograms for time sums and the fitted double Gaussian
 if plotTimeSums
+    disp('Plotting time sum histograms with double Guassian fit...')
     timeSumHistPlot = figure(200);
     clf(200)
     set(gcf, 'Name', 'Normalized histograms of time sums')
@@ -129,7 +132,7 @@ end
 
 %% Plot histograms for time differences and MCP hitmap
 if plotPositions
-    disp('Plotting results in histogram and x-y plot...')
+    disp('Plotting time difference histograms and MCP hitmap...')
     bins = 500;
     timeDiffHistPlot = figure(2);
     clf(2)
@@ -164,27 +167,29 @@ end
 
 %% Select the events corresponding to the left and right peaks of the time sums
 
-timeCutHitmapPlot = figure(301);
-clf(301)
-hold on
-set(gcf, 'Name', 'MCP 2D-plot with time cuts')
-
-cuts = [9.68e-8 1.011e-7];
-
-for k = 1:2
-    less = find(timeSum(:, k) < cuts(k));
-    more = find(timeSum(:, k) > cuts(k));
-
-    subplot(1, 2, k)
+if plotTimeCutHitmap
+    disp('Plotting time cut hitmap...')
+    timeCutHitmapPlot = figure(301);
+    clf(301)
     hold on
-    title(['Cut at ' num2str(cuts(k)) 's for channels ' num2str(channelGroups(k, 1)) ' and ' num2str(channelGroups(k, 2))])
-    scatter(timeDiff(less, 1), timeDiff(less, 2), 'b')
-    scatter(timeDiff(more, 1), timeDiff(more, 2), 'r')
-    xlabel('$x\propto \Delta t_x$', 'Interpreter', 'LaTeX');
-    ylabel('$y\propto \Delta t_y$', 'Interpreter', 'LaTeX');
-    legend('Short times', 'Long times')
-    axis square
+    set(gcf, 'Name', 'MCP 2D-plot with time cuts')
+
+    cuts = [9.68e-8 1.011e-7];
+
+    for k = 1:2
+        less = find(timeSum(:, k) < cuts(k));
+        more = find(timeSum(:, k) > cuts(k));
+
+        subplot(1, 2, k)
+        hold on
+        title(['Cut at ' num2str(cuts(k)) 's for channels ' num2str(channelGroups(k, 1)) ' and ' num2str(channelGroups(k, 2))])
+        scatter(timeDiff(less, 1), timeDiff(less, 2), 'b')
+        scatter(timeDiff(more, 1), timeDiff(more, 2), 'r')
+        xlabel('$x\propto \Delta t_x$', 'Interpreter', 'LaTeX');
+        ylabel('$y\propto \Delta t_y$', 'Interpreter', 'LaTeX');
+        legend('Short times', 'Long times')
+        axis square
+    end
+
+    suptitle('Events cut in time histograms')
 end
-
-suptitle('Events cut in time histograms')
-
