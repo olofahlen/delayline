@@ -19,17 +19,18 @@ if importSavedData
     disp('Loading saved data...')
     load mcpData3
 else
-    path = '/home/thorleif/mcp/tests/lotsofmeas/';
+    path = '/home/thorleif/mcp/tests/hugeshortmeas/';
     %path = '/home/thorleif/mcp/tests/gooddata/';
     channels = 4;
 
     C1files = dir([path 'C1*.dat']);
     nbrOfFiles = length(C1files);
 
-    dummyData = importdata([path C1files(1).name]);
+    timeAndAmplitudeMeas = 'timeandamplitudehugeshortmeas.dat';
+    dummyData = importdata([path timeAndAmplitudeMeas]);
     measPerFile = length(dummyData);
     nbrOfMeas = length(C1files);
-    %nbrOfMeas = 50;
+    nbrOfMeas = 50000;
 
     %This will contain all the measurements. The four channels will be on top
     %of each other.
@@ -38,20 +39,21 @@ else
     disp(['Loading ' num2str(nbrOfMeas*channels) ' files...'])
     
     modCheck = max(floor(nbrOfMeas/100), 1);
-    fprintf(1, '  0%% done\n')
+    fprintf(1, '  0%% done')
     for i = 1:nbrOfMeas
         measFile = C1files(i);
         fileName = measFile.name;
         for j = 1:channels
             fp = [path 'C' int2str(j) fileName(3:end)];
             importedData = importdata(fp);
-            data(:, i, j) = importedData(:, 2);
+            data(:, i, j) = importedData;
         end
         if mod(i, modCheck) == 0
             percentProgress = ceil(i/nbrOfMeas*100);
-            fprintf(1, '\b\b\b\b\b\b\b\b\b\b%3d%% done\n', percentProgress)
+            fprintf(1, '\b\b\b\b\b\b\b\b\b\b%3d%% done', percentProgress)
         end
     end
+    fprintf(1, '\n')
     if saveData
         disp('Saving data...')
         save('mcpData3')
@@ -154,8 +156,10 @@ if plotFourierTransform
 end
 %DATA(L/2 - fCutLength + 1:L/2 + fCutLength, :, :) = fZeroMask;
 %data = real(ifft(DATA))*L;
-sc = t/4e-9;
-data = filter(sc, [1 sc-1], data);
+sc = t/1e-9;
+for n = 1:4
+    data = filter(sc, [1 sc-1], data);
+end
 DATA = fft(data)/L;
 if plotFourierTransform
     subplot(2, 2, 3)
@@ -324,8 +328,11 @@ if plotCharges
     suptitle('Histograms of charges for the different channels')
     chargeScatterPlot = figure(32);
     clf(32)
+    hold on
+    title('Correlation of charge deposited on the two delay lines')
     set(gcf, 'Name', 'Charge scatter plot')
     scatter(totalCharge(:, 1), totalCharge(:, 2))
+    axis square
     xlabel(['Total charge deposited on channels ' num2str(channelGroups(1, 1)) ' and ' num2str(channelGroups(1, 2)) ' [e]'])
     ylabel(['Total charge deposited on channels ' num2str(channelGroups(2, 1)) ' and ' num2str(channelGroups(2, 2)) ' [e]'])
 end
@@ -366,20 +373,22 @@ fdhmHistPlot = figure(35);
 clf(fdhmHistPlot)
 set(gcf, 'Name', 'FDHM of the four channels')
 hold on
-cutFdhm = 20e-9;
 
-binX = linspace(0, cutFdhm, 300);
+fdhmMeans = mean(fdhm);
+fdhmStds = std(fdhm);
+fdhmLimits = [fdhmMeans - 3*fdhmStds; fdhmMeans + 3*fdhmStds];
 for j = 1:channels
+    binX = fdhmLimits(1, j):t/2:fdhmLimits(2, j);
     subplot(4, 1, j)
     hold on
     title(['FDHM for channel ' num2str(channelPairs(j))])
     xlabel('FDHM [s]')
     ylabel('Counts')
     hist(fdhm(:, j), binX)
-    axis([0 cutFdhm + 2e-9 0 1])
+    axis([min(fdhmLimits(1, :)) max(fdhmLimits(2, :)) 0 1])
     axis 'auto y'
 end
-suptitle(['Distribution of FDHM. This distribution is cut at ' num2str(cutFdhm) ' s.'])
+suptitle(['Distribution of FDHM'])
 
 %% Calculate pulse shape by averaging. This needs some more work, like cutting from the histogram fdhmHistPlot
 
@@ -429,7 +438,7 @@ if plotSignals
     for i = chosenSignal:chosenSignal
         for j = 1:channels
             color = colors(j);
-            meas = data(:, i, channelPairs(j));j
+            meas = data(:, i, channelPairs(j));
             subplot(2, 1, ceil(j/2));
             hold on
             title(['Channels ' num2str(channelGroups(ceil(j/2), 1)) ' and ' num2str(channelGroups(ceil(j/2), 2))])
@@ -454,7 +463,6 @@ disp('Calculating sums of times...')
 timeSum = [sum(signals(:, channelGroups(1, :)), 2) sum(signals(:, channelGroups(2, :)), 2)];
 
 disp('Plotting results in histogram and x-y plot...')
-bins = 150;
 
 if plotPositions
     timeSumHistPlot = figure(200);
@@ -463,45 +471,45 @@ if plotPositions
     for k = 1:2
         subplot(2, 1, k)
         hold on
-        title(['Delayline for channels ' num2str(channelGroups(k, 1)) ' and ' num2str(channelGroups(k, 2))])
         xlabel('$t_1 + t_2$ [s]', 'Interpreter', 'LaTeX')
         ylabel('Normalized counts')
-        [y, x] = histnorm(timeSum(:, k), bins, 'plot');
-        %tMean = mean(timeSum(:, k));
-        %tStd = std(timeSum(:, k));
+        tMean = mean(timeSum(:, k));
+        tStd = std(timeSum(:, k));
+        interval = tMean - 3*tStd : t/2 : tMean + 3*tStd;
+        [N, x] = hist(timeSum(:, k), interval);
+        x = x(2:end-1)';
+        N = N(2:end-1)';
+        bar(x, N)
+
         %plot(x, normpdf(x, tMean, tStd), 'r')
-        [peakMax peakIndex] = max(y);
-        guessMu1 = x(peakIndex);
-        halfPeakIndex = find(y>peakMax/2, 1, 'first');
-        lowerMu1 = x(halfPeakIndex);
-        guessSigma = guessMu1 - lowerMu1;
-        upperMu1 = lowerMu1 + 2*guessSigma;
-        upperSigma = guessMu1 - x(find(y>peakMax/4, 1, 'first'));
-        lowerSigma = guessMu1 - x(find(y>peakMax*3/4, 1, 'first'));
-        guessMu2 = x(end-peakIndex);
-        lowerMu2 = lowerMu1 + guessMu2 - guessMu1;
-        upperMu2 = upperMu1 + guessMu2 - guessMu1;
+        %[peakMax peakIndex] = max(N);
+        %guessMu1 = x(peakIndex);
+        %guessSigma = guessMu1 - x(find(N>peakMax*exp(-1/2), 1, 'first'));
+        %lowerMu1 = guessMu1 - guessSigma/2;
+        %upperMu1 = guessMu1 + guessSigma/2;
+        %upperSigma = guessMu1 - x(find(N>peakMax/4, 1, 'first'));
+        %lowerSigma = guessMu1 - x(find(N>peakMax*3/4, 1, 'first'));
+        %guessMu2 = interval(end-peakIndex);
+        %lowerMu2 = lowerMu1 + guessMu2 - guessMu1;
+        %upperMu2 = upperMu1 + guessMu2 - guessMu1;
 
-    	lower = [0 lowerMu1 lowerSigma lowerMu2 lowerSigma];
-    	upper = [1 upperMu1 upperSigma upperMu2 upperSigma];
-    	start = [0 guessMu1 guessSigma guessMu2 guessSigma];
+    	%lower = [0 lowerMu1 lowerSigma lowerMu2 lowerSigma];
+    	%upper = [1 upperMu1 upperSigma upperMu2 upperSigma];
+    	%start = [0 guessMu1 guessSigma guessMu2 guessSigma];
 
-        s = fitoptions('Method','NonlinearLeastSquares', 'Lower',lower, 'Upper',upper, 'Startpoint',start);
-        f = fittype('a*normpdf(x, mu1, sigma1) + (1-a)*normpdf(x, mu2, sigma2)', 'coeff', {'a', 'mu1', 'sigma1', 'mu2', 'sigma2'}, 'options', s);
-        %f = fittype('normpdf(x, mu, sigma)', 'options', s);
-
-        %g = fittype('a*normpdf(x, mu1, sigma1) + b*normpdf(x, mu2, sigma2)', 'coeff', {'a', 'mu1', 'sigma1', 'b', 'mu2', 'sigma2'});
-        %s = fitoptions('Startpoint', [0.5 96e-9 4e-9 0.5 98e-9 4e-9])
-        %g = fittype('a*normpdf(x, mu1, sigma1) + b*normpdf(x, mu2, sigma2)', 'options')
-        fittedGaussian = fit(x', y', f);
-        fitPlot = plot(x, fittedGaussian(x), 'r');
-        h = legend(fitPlot, '$a\cdot N(\mu_1, \sigma_1) + (1-a)\cdot N(\mu_2, sigma_2)$');
+        f = fittype('gauss2');
+        options = fitoptions('gauss2');
+        options.Lower = [0 -Inf 0 0 -Inf 0];
+        [fittedGaussians gof output] = fit(x, N, f, options);%, 'Weight', sqrt(N));
+        fitPlot = plot(fittedGaussians, 'r');
+        %plot(x, doubleGaussian(start(1), start(2), start(3), start(4), start(5), start(6),  x), 'y');
+        h = legend(fitPlot, '$a\cdot N(\mu_1, \sigma_1) + (1-a)\cdot N(\mu_2, \sigma_2)$');
         set(h, 'Interpreter', 'LaTeX')
-        plot([lowerMu1 guessMu1 upperMu1], [peakMax peakMax peakMax], 'og-')
-        plot([lowerMu2 guessMu2 upperMu2], [peakMax peakMax peakMax], 'og-')
-        plot([0 -lowerSigma -guessSigma -upperSigma]+guessMu1, [peakMax peakMax peakMax peakMax]/2, 'og-')
-        plot([0 -lowerSigma -guessSigma -upperSigma]+guessMu2, [peakMax peakMax peakMax peakMax]/2, 'og-')
-
+        %plot([lowerMu1 guessMu1 upperMu1], [peakMax peakMax peakMax], 'og-')
+        %plot([lowerMu2 guessMu2 upperMu2], [peakMax peakMax peakMax], 'og-')
+        %plot([0 -lowerSigma -guessSigma -upperSigma]+guessMu1, [peakMax peakMax peakMax peakMax]/2, 'og-')
+        %plot([0 -lowerSigma -guessSigma -upperSigma]+guessMu2, [peakMax peakMax peakMax peakMax]/2, 'og-')
+        title(['Delayline for channels ' num2str(channelGroups(k, 1)) ' and ' num2str(channelGroups(k, 2)) sprintf('. a = %.4f, mu_1 = %.4f ns, mu_2 = %.4f ns, sigma_1 = %.4f ns, sigma_2 = %f ns', fittedGaussians.a1, 1e9*fittedGaussians.b1, 1e9*fittedGaussians.b2, 1e9*fittedGaussians.c1, 1e9*fittedGaussians.c2)])
     end
     suptitle('Normalized histograms of time sums for the two delay lines')
 end
@@ -566,7 +574,7 @@ for k = 1:2
 
     subplot(1, 2, k)
     hold on
-    title(['Cut at ' num2str(cut) 's for channels ' num2str(channelGroups(k, 1)) ' and ' num2str(channelGroups(k, 2))])
+    title(['Cut at ' num2str(cuts(k)) 's for channels ' num2str(channelGroups(k, 1)) ' and ' num2str(channelGroups(k, 2))])
     scatter(timeDiff(less, 1), timeDiff(less, 2), 'b')
     scatter(timeDiff(more, 1), timeDiff(more, 2), 'r')
     xlabel('$x\propto \Delta t_x$', 'Interpreter', 'LaTeX');
