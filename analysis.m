@@ -1,6 +1,5 @@
 plotCharges = true;
 plotFdhm = true;
-plotSignals = true;
 plotTimeSums = true;
 plotPositions = true;
 plotTimeCutHitmap = true;
@@ -77,35 +76,6 @@ if plotFdhm
         axis 'auto y'
     end
     suptitle(['Distribution of FDHM'])
-end
-
-
-%% Plot signals
-%Look into correlation between signal heights and delays
-if plotSignals
-    disp('Plotting signals...')
-    signalPlot = figure(1);
-    clf(1)
-    set(gcf, 'Name', 'Signal plots')
-    pic = 1;
-    for i = chosenSignal:chosenSignal
-        for j = 1:channels
-            color = colors(j);
-            meas = data(:, i, channelPairs(j));
-            subplot(2, 1, ceil(j/2));
-            hold on
-            title(['Channels ' num2str(channelGroups(ceil(j/2), 1)) ' and ' num2str(channelGroups(ceil(j/2), 2))])
-            xlabel('Time [s]')
-            ylabel('Voltage [V]')
-            plot(T, meas, color)
-            plot(T(signalIndices(i, channelPairs(j))), meas(signalIndices(i, channelPairs(j))), 'o')
-            %The y-value in the following plot is not exact
-            plot(signals(i, j), meas(signalIndices(i, channelPairs(j))), '*')
-        end
-        %pause
-        %clf(1)
-    end
-    suptitle('Delay Line signals')
 end
 
 %%  Plot histograms for time sums and the fitted double Gaussian
