@@ -32,12 +32,12 @@ end
 
 %% Save figures
 
-figures = {'fourierPlot', 'offsetPlot', 'individualChargePlot', 'totalChargePlot', 'chargeScatterPlot', 'fdhmHistPlot', 'meanPulsePlot', 'fittedPeakPlot', 'signalPlot', 'timeSumHistPlot', 'timeDiffHistPlot', 'mcpHitmapPlot', 'timeCutHitmapPlot'};
+%figures = {'fourierPlot', 'offsetPlot', 'individualChargePlot', 'totalChargePlot', 'chargeScatterPlot', 'fdhmHistPlot', 'meanPulsePlot', 'fittedPeakPlot', 'signalPlot', 'timeSumHistPlot', 'timeDiffHistPlot', 'mcpHitmapPlot', 'timeCutHitmapPlot'};
+figureNames = fieldnames(figures);
 formats = {'png', 'epsc', 'fig', 'pdf'};
-path = '/home/thorleif/mcp/tests/pics/matlab/';
+path = '/home/thorleif/mcp/tests/pics/';
 
-for k = 1:length(figures)
-    figureName = figures{k};
+for figureName = figureNames
     for l = 1:length(formats)
         format = formats{l};
         disp(['Saving ' figureName ' as ' format '...'])

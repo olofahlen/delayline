@@ -2,6 +2,12 @@
 disp('Starting data analysis...')
 
 tic
+importProcessedData = false;
+
+if importProcessedData
+    disp('Importing saved processed data...')
+    load('processed96705')
+end
 
 plotCharges = true;
 plotFdhm = true;
@@ -9,10 +15,21 @@ plotTimeSums = true;
 plotPositions = true;
 plotTimeCutHitmap = true;
 
-allMask = [1:nbrOfMeas]';
-secondQuadrantMask = find(timeDiff(:, 1) < 0 & timeDiff(:, 2) > 0);
+figures.individualChargePlot = 21;
+figures.totalChargePlot = 22;
+figures.chargeScatterPlot = 23;
+figures.fdhmHistPlot = 24;
+figures.timeSumHistPlot = 25;
+figures.timeDiffHistPlot = 26;
+figures.mcpHitmapPlot = 27;
+figures.timeCutHitmapPlot = 28;
 
-mask = secondQuadrantMask;
+allMask = [1:nbrOfMeas]';
+smallLeftSquareMask = find(-6e-8 < timeDiff(:, 1) & timeDiff(:, 1) < -4e-8 & 0 < timeDiff(:, 2) & timeDiff(:, 2) < 2e-8);
+secondQuadrantMask = find(timeDiff(:, 1) < 0 & timeDiff(:, 2) > 0);
+shortFdhmMask = find(fdhm(:, 1) < 7.76e-9);
+
+mask = allMask;
 
 maskedCharge = charge(mask, :);
 maskedTotalCharge = totalCharge(mask, :);
@@ -26,8 +43,8 @@ if plotCharges
     disp('Plotting charges...')
     bins = 100;
     interval = linspace(0, 14e6, bins);
-    individualChargePlot = figure(30);
-    clf(30)
+    figure(figures.individualChargePlot);
+    clf(figures.individualChargePlot)
     set(gcf, 'Name', 'Individual charge histograms')
     for j = 1:channels
         subplot(4, 1, j)
@@ -40,8 +57,8 @@ if plotCharges
     end
 
     interval = linspace(0, 3e7, 100);
-    totalChargePlot = figure(31);
-    clf(31)
+    figure(figures.totalChargePlot);
+    clf(figures.totalChargePlot)
     set(gcf, 'Name', 'Total charge histograms')
     suptitle('Histograms of total charge for the two delay lines')
     for k = 1:2
@@ -59,8 +76,8 @@ if plotCharges
     xlabel('Charge [e]')
     ylabel('Counts')
     suptitle('Histograms of charges for the different channels')
-    chargeScatterPlot = figure(32);
-    clf(32)
+    figure(figures.chargeScatterPlot);
+    clf(figures.chargeScatterPlot)
     hold on
     title('Correlation of charge deposited on the two delay lines')
     set(gcf, 'Name', 'Charge scatter plot')
@@ -73,8 +90,8 @@ end
 %% Plot histograms for FDHM
 if plotFdhm
     disp('Plotting FDHM histograms...')
-    fdhmHistPlot = figure(35);
-    clf(fdhmHistPlot)
+    figure(figures.fdhmHistPlot);
+    clf(figures.fdhmHistPlot)
     set(gcf, 'Name', 'FDHM of the four channels')
     hold on
 
@@ -116,8 +133,8 @@ end
 
 if plotTimeSums
     disp('Plotting time sum histograms with double Guassian fit...')
-    timeSumHistPlot = figure(200);
-    clf(200)
+    figure(figures.timeSumHistPlot);
+    clf(figures.timeSumHistPlot)
     set(gcf, 'Name', 'Normalized histograms of time sums')
     for k = 1:2
         subplot(2, 1, k)
@@ -139,8 +156,8 @@ end
 if plotPositions
     disp('Plotting time difference histograms and MCP hitmap...')
     bins = 500;
-    timeDiffHistPlot = figure(2);
-    clf(2)
+    figure(figures.timeDiffHistPlot);
+    clf(figures.timeDiffHistPlot)
     set(gcf, 'Name', 'Histograms of time differences')
     subplot(2, 1, 1)
     hold on
@@ -156,25 +173,35 @@ if plotPositions
     hist(maskedTimeDiff(:, 2), bins)
     suptitle('Histograms of time differences for the two delay lines')
 
-    mcpHitmapPlot = figure(4);
-    clf(4)
+    figure(figures.mcpHitmapPlot);
+    clf(figures.mcpHitmapPlot)
     set(gcf, 'Name', 'MCP 2D-plot')
     hold on
+    for k = 1:2
+        subplot(1, 2, k)
+        if k == 1
+            maskedTimeDiff = timeDiff(mask, :);
+            maskedTotalCharge = totalCharge(mask, :);
+        else
+            maskedTimeDiff = timeMinDiff(allMask, :);
+            maskedTotalCharge = totalCharge(allMask, :);
+        end
+        scatter(maskedTimeDiff(:, 1), maskedTimeDiff(:, 2), 20, sum(maskedTotalCharge, 2 ), 'filled')
+        xlabel('$x\propto \Delta t_x$', 'Interpreter', 'LaTeX');
+        ylabel('$y\propto \Delta t_y$', 'Interpreter', 'LaTeX');
+        axis square
+        cb = colorbar;
+        ylabel(cb, 'Charge [e]')
+    end
     suptitle('Reconstruction of particle hits on the MCP')
-    scatter(maskedTimeDiff(:, 1), maskedTimeDiff(:, 2), 20, sum(maskedTotalCharge, 2 ), 'filled')
-    xlabel('$x\propto \Delta t_x$', 'Interpreter', 'LaTeX');
-    ylabel('$y\propto \Delta t_y$', 'Interpreter', 'LaTeX');
-    axis square
-    cb = colorbar;
-    ylabel(cb, 'Charge [e]')
 end
 
 %% Select the events corresponding to the left and right peaks of the time sums
 
 if plotTimeCutHitmap
     disp('Plotting time cut hitmap...')
-    timeCutHitmapPlot = figure(301);
-    clf(301)
+    figure(figures.timeCutHitmapPlot);
+    clf(figures.timeCutHitmapPlot)
     hold on
     set(gcf, 'Name', 'MCP 2D-plot with time cuts')
 

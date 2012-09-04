@@ -13,12 +13,13 @@ tic
 
 %% Load data
 
-importSavedData = 1;
+importSavedData = 0;
 saveData = 1;
+cutMeasurements = 0;
 
 if importSavedData
     disp('Loading saved data...')
-    load mcpData
+    load('100000')
 else
     path = '/home/thorleif/mcp/tests/hugeshortmeas/';
     %path = '/home/thorleif/mcp/tests/gooddata/';
@@ -31,11 +32,9 @@ else
     dummyData = importdata([path timeAndAmplitudeMeas]);
     measPerFile = length(dummyData);
     nbrOfMeas = length(C1files);
-    nbrOfMeas = 5000;
+    %nbrOfMeas = 20000;
 
-    %This will contain all the measurements. The four channels will be on top
-    %of each other.
-    
+    %This variable will contain all the measurements.
     data = zeros(measPerFile, nbrOfMeas, channels);
     disp(['Loading ' num2str(nbrOfMeas*channels) ' files...'])
     
@@ -57,16 +56,26 @@ else
     fprintf(1, '\n')
     if saveData
         disp('Saving data...')
-        save('mcpData')
+        save(num2str(nbrOfMeas), '-v7.3')
     end
 end
 
+if cutMeasurements
+    data = data(1:cutMeasurements, :, :);
+end
+
 %% Settings
-plotOffsets = 1;
-plotFourierTransform = 1;
-plotSignals = 1;
-plotMeanPulse = 1;
-plotFittedPeaks = 1;
+plotOffsets = true;
+plotFourierTransform = true;
+plotSignals = true;
+plotMeanPulse = true;
+plotFittedPeaks = true;
+
+figures.offsetPlot = 11;
+figures.fourierPlot = 12;
+figures.fittedPeakPlot = 13;
+figures.meanPulsePlot = 14;
+figures.signalPlot = 15;
 
 chosenChannel = 1;
 chosenSignal = 1;
@@ -94,8 +103,8 @@ nNoise = floor(measPerFile/15);
 
 disp('Removing offsets...')
 if plotOffsets
-    offsetPlot = figure(22);
-    clf(22)
+    figure(figures.offsetPlot);
+    clf(figures.offsetPlot)
     set(gcf, 'Name', 'Signal Offsets')
     subplot(2, 1, 1)
     hold on
@@ -131,8 +140,8 @@ disp('Cleaning with low pass filters...')
 if plotFourierTransform
     signalOverNoise = mean(mean(-squeeze(min(data))./squeeze(std(data(1:nNoise, :, :)))));
     meas = data(:, chosenSignal, chosenChannel);
-    fourierPlot = figure(11);
-    clf(11)
+    figure(figures.fourierPlot);
+    clf(figures.fourierPlot)
     set(gcf, 'Name', 'Signal Fourier Transform')
     hold on
     subplot(2, 2, 1)
@@ -209,7 +218,7 @@ data = data(:, goods, :);
 nbrOfMeas = size(data, 2);
 good = ones(size(data, 2), 1);
 
-%% Locate peaks
+%% Locate peaks with parabola
 
 disp('Locating peaks by minimum of fitted quadratic...')
 signalIndices = zeros(nbrOfMeas, 4);
@@ -225,8 +234,8 @@ for i = 1:nbrOfMeas
         signalIndices(i, j) = minIndex;
         signals(i, j) = minT;
         if plotFittedPeaks && i == chosenSignal && j == chosenChannel
-            fittedPeakPlot = figure(400);
-            clf(400)
+            figure(figures.fittedPeakPlot);
+            clf(figures.fittedPeakPlot)
             set(gcf, 'Name', 'Fitting parabola')
             hold on
             title('Fitting of a parbola to find the true minimum')
@@ -260,6 +269,9 @@ data = data(:, find(good == 1), :);
 nbrOfMeas = size(data, 2);
 signals = signals(find(good == 1), :);
 signalIndices = signalIndices(find(good == 1), :);
+
+%% Locate peaks with bare minimum
+minPeaks = T(signalIndices);
 
 %% Calculate charge
 
@@ -321,8 +333,8 @@ disp('Calculating mean pulse shape...')
 mins = squeeze(mins);
 pulseShaper = zeros(4*nRiseTime + 1, size(data, 2), size(data, 3));
 if plotMeanPulse
-    meanPulsePlot = figure(40);
-    clf(40)
+    figure(figures.meanPulsePlot);
+    clf(figures.meanPulsePlot)
     set(gcf, 'Name', 'Mean pulse calculation')
     subplot(1, 2, 1)
     xlabel('Shifted time indices')
@@ -353,27 +365,25 @@ end
 
 %% Calculate total time and fit double Gaussian
 
-disp('Calculating sums of times and fitting double Gaussian...')
+disp('Calculating sums of times...')
 
-timeMinSum = [sum(signalIndices(:, channelGroups(1, :)), 2) sum(signalIndices(:, channelGroups(2, :)), 2)];
+timeMinSum = [sum(minPeaks(:, channelGroups(1, :)), 2) sum(minPeaks(:, channelGroups(2, :)), 2)];
 timeSum = [sum(signals(:, channelGroups(1, :)), 2) sum(signals(:, channelGroups(2, :)), 2)];
 
 %% Calculate positions
 
-disp('Calculating spatial coordinates...')
+disp('Calculating differences of times...')
 
-timeMinDiff = [diff(signalIndices(:, channelGroups(1, :)), 2) diff(signalIndices(:, channelGroups(2, :)), 2)];
-timeDiff = [diff(signals(:, channelGroups(1, :)), 1, 2) diff(signals(:, channelGroups(2, :)), 1, 2)];
-
-%This minus sign is arbitrary, only mirrors the image in the origin.
-timeDiff = -timeDiff;
+timeMinDiff = -[diff(minPeaks(:, channelGroups(1, :)), 1, 2) diff(minPeaks(:, channelGroups(2, :)), 1, 2)];
+timeDiff = -[diff(signals(:, channelGroups(1, :)), 1, 2) diff(signals(:, channelGroups(2, :)), 1, 2)];
+%The minus sign above is arbitrary, only mirrors the image in the origin.
 
 %% Plot signals
 %Look into correlation between signal heights and delays
 if plotSignals
     disp('Plotting signals...')
-    signalPlot = figure(1);
-    clf(1)
+    figure(figures.signalPlot);
+    clf(figures.signalPlot)
     set(gcf, 'Name', 'Signal plots')
     pic = 1;
     for i = chosenSignal:chosenSignal
@@ -395,6 +405,10 @@ if plotSignals
     end
     suptitle('Delay Line signals')
 end
+
+%% Save processed data
+savex(num2str(nbrOfMeas, 'processed%d'), 'data');
+
 
 %% End timing for the data processing
 toc
