@@ -134,7 +134,6 @@ if plotPositions
     ylabel(cb, 'Charge [e]')
 end
 
-
 %% Select the events corresponding to the left and right peaks of the time sums
 
 if plotTimeCutHitmap
@@ -144,17 +143,17 @@ if plotTimeCutHitmap
     hold on
     set(gcf, 'Name', 'MCP 2D-plot with time cuts')
 
-    cuts = [9.68e-8 1.011e-7];
-
     for k = 1:2
-        less = find(timeSum(:, k) < cuts(k));
-        more = find(timeSum(:, k) > cuts(k));
+        gaussians = gaussianFits{k};
+        cut = (gaussians.b2 - gaussians.b1)/(gaussians.c2 + gaussians.c1) * gaussians.c1 + gaussians.b1;
+        less = find(timeSum(:, k) < cut);
+        more = find(timeSum(:, k) > cut);
 
         subplot(1, 2, k)
         hold on
-        title(['Cut at ' num2str(cuts(k)) 's for channels ' num2str(channelGroups(k, 1)) ' and ' num2str(channelGroups(k, 2))])
-        scatter(timeDiff(less, 1), timeDiff(less, 2), 'b')
-        scatter(timeDiff(more, 1), timeDiff(more, 2), 'r')
+        title(['Cut at ' num2str(cut) 's for channels ' num2str(channelGroups(k, 1)) ' and ' num2str(channelGroups(k, 2))])
+        scatter(timeDiff(less, 1), timeDiff(less, 2), 4, 'b')
+        scatter(timeDiff(more, 1), timeDiff(more, 2), 4, 'r')
         xlabel('$x\propto \Delta t_x$', 'Interpreter', 'LaTeX');
         ylabel('$y\propto \Delta t_y$', 'Interpreter', 'LaTeX');
         legend('Short times', 'Long times')
