@@ -1,4 +1,5 @@
 %% Initial
+disp('Starting data processing...')
 
 %Toolboxes: DSP, SIgnal Processing, Wavelet
 clear all
@@ -87,6 +88,7 @@ f = Fs/2*linspace(0,1,L/2+1); %Frequency vector
 
 riseTime = 1e-8;
 nRiseTime = floor(riseTime/t);
+nNoise = floor(measPerFile/15);
 
 %% Remove offsets
 
@@ -105,7 +107,7 @@ if plotOffsets
     ylabel('Voltage [V]')
 end
 
-pedestal = mean(data(1:floor(measPerFile/15), :, :));
+pedestal = mean(data(1:floor(nNoise), :, :));
 data = bsxfun(@minus, data, pedestal);
 
 if plotOffsets
@@ -127,6 +129,7 @@ end
 disp('Cleaning with low pass filters...')
 
 if plotFourierTransform
+    signalOverNoise = mean(mean(-squeeze(min(data))./squeeze(std(data(1:nNoise, :, :)))));
     meas = data(:, chosenSignal, chosenChannel);
     fourierPlot = figure(11);
     clf(11)
@@ -134,7 +137,7 @@ if plotFourierTransform
     hold on
     subplot(2, 2, 1)
     hold on
-    title('Before low pass')
+    title(num2str(signalOverNoise, 'Before low pass. S/N = %.3f'))
     xlabel('Time [s]')
     ylabel('Voltage [V]')
     plot(T, meas)
@@ -151,11 +154,12 @@ for n = 1:4
     data = filter(sc, [1 sc-1], data);
 end
 if plotFourierTransform
+    signalOverNoise = mean(mean(-squeeze(min(data))./squeeze(std(data(1:nNoise, :, :)))));
     meas = data(:, chosenSignal, chosenChannel);
     MEAS = fft(meas)/L;
     subplot(2, 2, 3)
     hold on
-    title('After low pass')
+    title(num2str(signalOverNoise, 'After low pass. S/N = %.3f'))
     xlabel('Time [s]')
     ylabel('Voltage [V]')
     plot(T, meas);
@@ -170,13 +174,13 @@ end
 
 %% Remove bad signals by shape
 
-disp('Removing bad signals by shape...')
+disp('Looking for bad signals by shape...')
 
 good = ones(size(data, 2), 1);
 
 [minVal minIndex] = min(data);;
 potentialStart = squeeze(minIndex - nRiseTime);
-[row col] = find(potentialStart < measPerFile/15);
+[row col] = find(potentialStart < nNoise);
 good(row) = 0;
 [row col] = find(potentialStart > measPerFile - (2*nRiseTime + 1));
 good(row) = 0;
@@ -256,34 +260,6 @@ data = data(:, find(good == 1), :);
 nbrOfMeas = size(data, 2);
 signals = signals(find(good == 1), :);
 signalIndices = signalIndices(find(good == 1), :);
-
-%% Plot signals
-%Look into correlation between signal heights and delays
-if plotSignals
-    disp('Plotting signals...')
-    signalPlot = figure(1);
-    clf(1)
-    set(gcf, 'Name', 'Signal plots')
-    pic = 1;
-    for i = chosenSignal:chosenSignal
-        for j = 1:channels
-            color = colors(j);
-            meas = data(:, i, channelPairs(j));
-            subplot(2, 1, ceil(j/2));
-            hold on
-            title(['Channels ' num2str(channelGroups(ceil(j/2), 1)) ' and ' num2str(channelGroups(ceil(j/2), 2))])
-            xlabel('Time [s]')
-            ylabel('Voltage [V]')
-            plot(T, meas, color)
-            plot(T(signalIndices(i, channelPairs(j))), meas(signalIndices(i, channelPairs(j))), 'o')
-            %The y-value in the following plot is not exact
-            plot(signals(i, j), meas(signalIndices(i, channelPairs(j))), '*')
-        end
-        %pause
-        %clf(1)
-    end
-    suptitle('Delay Line signals')
-end
 
 %% Calculate charge
 
@@ -382,25 +358,6 @@ disp('Calculating sums of times and fitting double Gaussian...')
 timeMinSum = [sum(signalIndices(:, channelGroups(1, :)), 2) sum(signalIndices(:, channelGroups(2, :)), 2)];
 timeSum = [sum(signals(:, channelGroups(1, :)), 2) sum(signals(:, channelGroups(2, :)), 2)];
 
-disp('Plotting results in histogram and x-y plot...')
-
-for k = 1:2
-    tMean = mean(timeSum(:, k));
-    tStd = std(timeSum(:, k));
-    interval = tMean - 3*tStd : t/2 : tMean + 3*tStd;
-    [N, x] = hist(timeSum(:, k), interval);
-    x = x(2:end-1)';
-    N = N(2:end-1)';
-    timeSumX{k} = x;
-    timeSumN{k} = N;
-
-    f = fittype('gauss2');
-    options = fitoptions('gauss2');
-    options.Lower = [0 -Inf 0 0 -Inf 0];
-    [fittedGaussians gof output] = fit(x, N, f, options);%, 'Weight', sqrt(N));
-    gaussianFits{k} = fittedGaussians;
-end
-
 %% Calculate positions
 
 disp('Calculating spatial coordinates...')
@@ -411,11 +368,36 @@ timeDiff = [diff(signals(:, channelGroups(1, :)), 1, 2) diff(signals(:, channelG
 %This minus sign is arbitrary, only mirrors the image in the origin.
 timeDiff = -timeDiff;
 
+%% Plot signals
+%Look into correlation between signal heights and delays
+if plotSignals
+    disp('Plotting signals...')
+    signalPlot = figure(1);
+    clf(1)
+    set(gcf, 'Name', 'Signal plots')
+    pic = 1;
+    for i = chosenSignal:chosenSignal
+        for j = 1:channels
+            color = colors(j);
+            meas = data(:, i, channelPairs(j));
+            subplot(2, 1, ceil(j/2));
+            hold on
+            title(['Channels ' num2str(channelGroups(ceil(j/2), 1)) ' and ' num2str(channelGroups(ceil(j/2), 2))])
+            xlabel('Time [s]')
+            ylabel('Voltage [V]')
+            plot(T, meas, color)
+            plot(T(signalIndices(i, channelPairs(j))), meas(signalIndices(i, channelPairs(j))), 'o')
+            %The y-value in the following plot is not exact
+            plot(signals(i, j), meas(signalIndices(i, channelPairs(j))), '*')
+        end
+        %pause
+        %clf(1)
+    end
+    suptitle('Delay Line signals')
+end
+
 %% End timing for the data processing
 toc
 
 %% Run the data analysis script to produce figures
 analysis
-
-%%
-toc
