@@ -37,10 +37,11 @@ figureNames = fieldnames(figures);
 formats = {'png', 'epsc', 'fig', 'pdf'};
 path = '/home/thorleif/mcp/tests/pics/';
 
-for figureName = figureNames
+for k = 1:length(figureNames)
+    figureName = figureNames{k};
     for l = 1:length(formats)
         format = formats{l};
         disp(['Saving ' figureName ' as ' format '...'])
-        saveas(eval(figureName), [path figureName], format)
+        saveas(eval(['figures.' figureName]), [path figureName], format)
     end
 end

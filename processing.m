@@ -13,16 +13,15 @@ tic
 
 %% Load data
 
-importSavedData = 0;
+importSavedData = 1;
 saveData = 1;
-cutMeasurements = 0;
+cutMeasurements = 50000;
 
 if importSavedData
     disp('Loading saved data...')
     load('100000')
 else
     path = '/home/thorleif/mcp/tests/hugeshortmeas/';
-    %path = '/home/thorleif/mcp/tests/gooddata/';
     channels = 4;
 
     C1files = dir([path 'C1*.dat']);
@@ -71,11 +70,11 @@ plotSignals = true;
 plotMeanPulse = true;
 plotFittedPeaks = true;
 
-figures.offsetPlot = 11;
-figures.fourierPlot = 12;
-figures.fittedPeakPlot = 13;
-figures.meanPulsePlot = 14;
-figures.signalPlot = 15;
+%figures.offsetPlot = 11;
+%figures.fourierPlot = 12;
+%figures.fittedPeakPlot = 13;
+%figures.meanPulsePlot = 14;
+%figures.signalPlot = 15;
 
 chosenChannel = 1;
 chosenSignal = 1;
@@ -103,17 +102,17 @@ nNoise = floor(measPerFile/15);
 
 disp('Removing offsets...')
 if plotOffsets
-    figure(figures.offsetPlot);
+    figures.offsetPlot = figure(11);
     clf(figures.offsetPlot)
     set(gcf, 'Name', 'Signal Offsets')
     subplot(2, 1, 1)
     hold on
     title('Before removing offset')
     for j = 1:channels
-        plot(T, data(:, 1, channelPairs(j)), colors(channelPairs(j)))
+        plot(1e9*T, 1e3*data(:, 1, channelPairs(j)), colors(channelPairs(j)))
     end
-    xlabel('Time [s]')
-    ylabel('Voltage [V]')
+    xlabel('Time [ns]')
+    ylabel('Voltage [mV]')
 end
 
 pedestal = mean(data(1:floor(nNoise), :, :));
@@ -140,23 +139,23 @@ disp('Cleaning with low pass filters...')
 if plotFourierTransform
     signalOverNoise = mean(mean(-squeeze(min(data))./squeeze(std(data(1:nNoise, :, :)))));
     meas = data(:, chosenSignal, chosenChannel);
-    figure(figures.fourierPlot);
+    figures.fourierPlot = figure(12);
     clf(figures.fourierPlot)
     set(gcf, 'Name', 'Signal Fourier Transform')
     hold on
     subplot(2, 2, 1)
     hold on
     title(num2str(signalOverNoise, 'Before low pass. S/N = %.3f'))
-    xlabel('Time [s]')
-    ylabel('Voltage [V]')
-    plot(T, meas)
+    xlabel('Time [ns]')
+    ylabel('Voltage [mV]')
+    plot(1e9*T, 1e3*meas)
     MEAS = fft(meas)/L;
     subplot(2, 2, 2)
-    semilogy(f, 2*abs(MEAS(1:L/2+1))) 
+    semilogy(1e-9*f, 1e3*2*abs(MEAS(1:L/2+1))) 
     hold on
     title('Uncut Fourier spectrum')
-    xlabel('Frequency (Hz)')
-    ylabel('Fourier transform [Vs]')
+    xlabel('Frequency [GHz]')
+    ylabel('Fourier transform [mV s]')
 end
 sc = t/1e-9;
 for n = 1:4
@@ -169,15 +168,15 @@ if plotFourierTransform
     subplot(2, 2, 3)
     hold on
     title(num2str(signalOverNoise, 'After low pass. S/N = %.3f'))
-    xlabel('Time [s]')
-    ylabel('Voltage [V]')
-    plot(T, meas);
+    xlabel('Time [ns]')
+    ylabel('Voltage [mV]')
+    plot(1e9*T, 1e3*meas);
     subplot(2, 2, 4)
-    semilogy(f, 2*abs(MEAS(1:L/2+1)))
+    semilogy(1e-9*f, 1e3*2*abs(MEAS(1:L/2+1)))
     hold on
     title('Cut Fourier spectrum')
-    xlabel('Frequency (Hz)')
-    ylabel('Fourier transform [Vs]')
+    xlabel('Frequency (GHz)')
+    ylabel('Fourier transform [mVs]')
     suptitle('Before and after filter')
 end
 
@@ -234,19 +233,19 @@ for i = 1:nbrOfMeas
         signalIndices(i, j) = minIndex;
         signals(i, j) = minT;
         if plotFittedPeaks && i == chosenSignal && j == chosenChannel
-            figure(figures.fittedPeakPlot);
+            figures.fittedPeakPlot = figure(13);
             clf(figures.fittedPeakPlot)
             set(gcf, 'Name', 'Fitting parabola')
             hold on
             title('Fitting of a parbola to find the true minimum')
-            plot(T(interval), meas(interval))
+            plot(1e9*T(interval), 1e3*meas(interval))
             fineT = linspace(T(interval(1)), T(interval(end)), 100);
             [fittedData delta] = polyval(p, fineT, S, mu);
-            plot(fineT, fittedData, 'r')
+            plot(1e9*fineT, 1e3*fittedData, 'r')
             minV = polyval(p, minT, S, mu);
-            plot(minT, polyval(p, minT, S, mu), 'g*')
-            xlabel('Time [s]')
-            ylabel('Voltage [V]')
+            plot(1e9*minT, 1e3*polyval(p, minT, S, mu), 'g*')
+            xlabel('Time [ns]')
+            ylabel('Voltage [mV]')
         end
     end
 end
@@ -333,12 +332,12 @@ disp('Calculating mean pulse shape...')
 mins = squeeze(mins);
 pulseShaper = zeros(4*nRiseTime + 1, size(data, 2), size(data, 3));
 if plotMeanPulse
-    figure(figures.meanPulsePlot);
+    figures.meanPulsePlot = figure(14);
     clf(figures.meanPulsePlot)
     set(gcf, 'Name', 'Mean pulse calculation')
     subplot(1, 2, 1)
-    xlabel('Shifted time indices')
-    ylabel('Voltage [V]')
+    xlabel('Shifted time [ns]')
+    ylabel('Voltage [mV]')
     hold on
     title(['Pulses from channel ' num2str(chosenChannel) ' overlaid'])
 end
@@ -347,7 +346,7 @@ for i = 1:nbrOfMeas
         nRange = (mins(i, j) - 2*nRiseTime):(mins(i, j) + 2*nRiseTime);
         pulseShaper(:, i, j) = data(nRange, i, j);
         if plotMeanPulse && i < 150 && j == chosenChannel
-            plot(pulseShaper(:, i, j), colors(mod(i, 4) + 1))
+            plot(1e9*t*(1:length(nRange)), 1e3*pulseShaper(:, i, j), colors(mod(i, 4) + 1))
         end
     end
 end
@@ -357,9 +356,9 @@ if plotMeanPulse
     subplot(1, 2, 2)
     hold on
     title(['Mean pulse for channel ' num2str(chosenChannel)])
-    xlabel('Shifted time indices')
-    ylabel('Voltage [V]')
-    plot(pulse(:, 1))
+    xlabel('Shifted time [ns]')
+    ylabel('Voltage [mV]')
+    plot(1e9*t*(1:length(nRange)), 1e3*pulse(:, 1))
     suptitle('Calculation of the average pulse')
 end
 
@@ -382,7 +381,7 @@ timeDiff = -[diff(signals(:, channelGroups(1, :)), 1, 2) diff(signals(:, channel
 %Look into correlation between signal heights and delays
 if plotSignals
     disp('Plotting signals...')
-    figure(figures.signalPlot);
+    figures.signalPlot = figure(15);
     clf(figures.signalPlot)
     set(gcf, 'Name', 'Signal plots')
     pic = 1;
@@ -393,12 +392,12 @@ if plotSignals
             subplot(2, 1, ceil(j/2));
             hold on
             title(['Channels ' num2str(channelGroups(ceil(j/2), 1)) ' and ' num2str(channelGroups(ceil(j/2), 2))])
-            xlabel('Time [s]')
-            ylabel('Voltage [V]')
-            plot(T, meas, color)
-            plot(T(signalIndices(i, channelPairs(j))), meas(signalIndices(i, channelPairs(j))), 'o')
+            xlabel('Time [ns]')
+            ylabel('Voltage [mV]')
+            plot(1e9*T, 1e3*meas, color)
+            plot(1e9*T(signalIndices(i, channelPairs(j))), 1e3*meas(signalIndices(i, channelPairs(j))), 'o')
             %The y-value in the following plot is not exact
-            plot(signals(i, j), meas(signalIndices(i, channelPairs(j))), '*')
+            plot(1e9*signals(i, j), 1e3*meas(signalIndices(i, channelPairs(j))), '*')
         end
         %pause
         %clf(1)
