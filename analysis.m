@@ -15,15 +15,6 @@ plotTimeSums = true;
 plotPositions = true;
 plotTimeCutHitmap = true;
 
-%figures.individualChargePlot = 21;
-%figures.totalChargePlot = 22;
-%figures.chargeScatterPlot = 23;
-%figures.fdhmHistPlot = 24;
-%figures.timeSumHistPlot = 25;
-%figures.timeDiffHistPlot = 26;
-%figures.mcpHitmapPlot = 27;
-%figures.timeCutHitmapPlot = 28;
-
 allMask = [1:nbrOfMeas]';
 smallLeftSquareMask = find(-6e-8 < timeDiff(:, 1) & timeDiff(:, 1) < -4e-8 & 0 < timeDiff(:, 2) & timeDiff(:, 2) < 2e-8);
 secondQuadrantMask = find(timeDiff(:, 1) < 0 & timeDiff(:, 2) > 0);
@@ -37,6 +28,16 @@ maskedGrandTotalCharge = grandTotalCharge(mask, :);
 maskedFdhm = fdhm(mask, :);
 maskedTimeSum = timeSum(mask, :);
 maskedTimeDiff = timeDiff(mask, :);
+
+compare = false;
+compareMask = secondQuadrantMask;
+
+compareCharge = charge(compareMask, :);
+compareTotalCharge = totalCharge(compareMask, :);
+compareGrandTotalCharge = grandTotalCharge(compareMask, :);
+compareFdhm = fdhm(compareMask, :);
+compareTimeSum = timeSum(compareMask, :);
+compareTimeDiff = timeDiff(compareMask, :);
 
 %% Plot histograms with charges
 if plotCharges
@@ -53,7 +54,14 @@ if plotCharges
         xlabel('Charge [e]')
         ylabel('Counts')
         hist(maskedCharge(:, j), interval)
-        %hist(maskedCharge(:, j), bins)
+        if compare
+            h = findobj(gca, 'Type', 'patch');
+            set(h, 'FaceColor', 'b', 'EdgeColor', 'w', 'facealpha', 0.75)
+            hist(compareCharge(:, j), interval)
+            newH = findobj(gca, 'Type', 'patch');
+            newH = newH(find(newH ~= h));
+            set(newH, 'FaceColor', 'r', 'EdgeColor', 'w', 'facealpha', 0.75)
+        end
     end
     suptitle('Charge arrived at each channel')
 
@@ -68,10 +76,27 @@ if plotCharges
         xlabel('Charge [e]')
         ylabel('Counts')
         hist(maskedTotalCharge(:, k), interval)
-        %hist(maskedTotalCharge(:, k), bins)
+        if compare
+            h = findobj(gca, 'Type', 'patch');
+            set(h, 'FaceColor', 'b', 'EdgeColor', 'w', 'facealpha', 0.75)
+            hist(compareTotalCharge(:, k), interval)
+            newH = findobj(gca, 'Type', 'patch');
+            newH = newH(find(newH ~= h));
+            set(newH, 'FaceColor', 'r', 'EdgeColor', 'w', 'facealpha', 0.75)
+        end
     end
     subplot(3, 1, 3)
-    hist(maskedGrandTotalCharge, bins)
+    interval = linspace(min(maskedGrandTotalCharge), max(maskedGrandTotalCharge), 100);
+    hist(maskedGrandTotalCharge, interval)
+    hold on
+    if compare
+        h = findobj(gca, 'Type', 'patch');
+        set(h, 'FaceColor', 'b', 'EdgeColor', 'w', 'facealpha', 0.75)
+        hist(compareGrandTotalCharge, interval)
+        newH = findobj(gca, 'Type', 'patch');
+        newH = newH(find(newH ~= h));
+        set(newH, 'FaceColor', 'r', 'EdgeColor', 'w', 'facealpha', 0.75)
+    end
     title(['Total charge deposited both delay lines'])
     xlabel('Charge [e]')
     ylabel('Counts')
@@ -82,6 +107,9 @@ if plotCharges
     title('Correlation of charge deposited on the two delay lines')
     set(gcf, 'Name', 'Charge scatter plot')
     scatter(maskedTotalCharge(:, 1), maskedTotalCharge(:, 2), 4)
+    if compare
+        scatter(compareTotalCharge(:, 1), compareTotalCharge(:, 2), 4, 'r')
+    end
     axis square
     maxCharge = max(max(totalCharge));
     axis([0 maxCharge 0 maxCharge])
@@ -99,7 +127,13 @@ if plotFdhm
 
     fdhmMeans = mean(maskedFdhm);
     fdhmStds = std(maskedFdhm);
-    fdhmLimits = [max(0, fdhmMeans - 3*fdhmStds); fdhmMeans + 3*fdhmStds];
+    if compare
+        fdhmMeansCompare = mean(compareFdhm);
+        fdhmStdsCompare = std(compareFdhm);
+        fdhmLimits = [max(0, min(fdhmMeans - 3*fdhmStds, fdhmMeansCompare - 3*fdhmStdsCompare)); max(fdhmMeans + 3*fdhmStds, fdhmMeansCompare + 3*fdhmStdsCompare)];
+    else
+        fdhmLimits = [max(0, fdhmMeans - 3*fdhmStds); fdhmMeans + 3*fdhmStds];
+    end
     for j = 1:channels
         binX = fdhmLimits(1, j):t/2:fdhmLimits(2, j);
         subplot(4, 1, j)
@@ -108,29 +142,44 @@ if plotFdhm
         xlabel('FDHM [ns]')
         ylabel('Counts')
         hist(1e9*maskedFdhm(:, j), 1e9*binX)
+        if compare
+            h = findobj(gca, 'Type', 'patch');
+            set(h, 'FaceColor', 'b', 'EdgeColor', 'w', 'facealpha', 0.75)
+            hist(1e9*compareFdhm(:, j), 1e9*binX)
+            newH = findobj(gca, 'Type', 'patch');
+            newH = newH(find(newH ~= h));
+            set(newH, 'FaceColor', 'r', 'EdgeColor', 'w', 'facealpha', 0.75)
+        end
         axis(1e9*[min(fdhmLimits(1, :)) max(fdhmLimits(2, :)) 0 1])
         axis 'auto y'
     end
-    suptitle(['Distribution of FDHM'])
+    suptitle('Distribution of FDHM')
 end
 
 %%  Plot histograms for time sums and fit a double Gaussian
 disp('Fitting double Gaussian...')
-for k = 1:2
-    tMean = mean(maskedTimeSum(:, k));
-    tStd = std(maskedTimeSum(:, k));
-    interval = tMean - 3*tStd : t/2 : tMean + 3*tStd;
-    [N, x] = hist(maskedTimeSum(:, k), interval);
-    x = x(2:end-1)';
-    N = N(2:end-1)';
-    timeSumX{k} = x;
-    timeSumN{k} = N;
+for l = 1:1 + compare
+    if l == 1
+        calcTimeSum = maskedTimeSum;
+    else
+        calcTimeSum = compareTimeSum;
+    end
+    for k = 1:2
+        tMean = mean(calcTimeSum(:, k));
+        tStd = std(calcTimeSum(:, k));
+        interval = tMean - 3*tStd : t/2 : tMean + 3*tStd;
+        [N, x] = hist(calcTimeSum(:, k), interval);
+        x = x(2:end-1)';
+        N = N(2:end-1)';
+        timeSumX{(l-1)*2 + k} = x;
+        timeSumN{(l-1)*2 + k} = N;
 
-    fitObj = fittype('gauss2');
-    options = fitoptions('gauss2');
-    options.Lower = [0 -Inf 0 0 -Inf 0];
-    [fittedGaussians gof output] = fit(x, N, fitObj, options);%, 'Weight', sqrt(N));
-    gaussianFits{k} = fittedGaussians;
+        fitObj = fittype('gauss2');
+        options = fitoptions('gauss2');
+        options.Lower = [0 -Inf 0 0 -Inf 0];
+        [fittedGaussians gof output] = fit(x, N, fitObj, options);
+        gaussianFits{(l-1)*2 + k} = fittedGaussians;
+    end
 end
 
 if plotTimeSums
@@ -144,16 +193,26 @@ if plotTimeSums
         xlabel('$t_1 + t_2$ [ns]', 'Interpreter', 'LaTeX')
         ylabel('Counts')
         bar(1e9*timeSumX{k}, timeSumN{k})
+        if compare
+            h = findobj(gca, 'Type', 'patch');
+            set(h, 'FaceColor', 'b', 'EdgeColor', 'w', 'facealpha', 0.75)
+            bar(1e9*timeSumX{2 + k}, timeSumN{2 + k})
+            newH = findobj(gca, 'Type', 'patch');
+            newH = newH(find(newH ~= h));
+            set(newH, 'FaceColor', 'r', 'EdgeColor', 'w', 'facealpha', 0.75)
+        end
         %bar(timeSumX{k}, timeSumN{k})
 
         fittedGaussians = gaussianFits{k};
         fitPlot = plot(1e9*timeSumX{k}, fittedGaussians(timeSumX{k}), 'r');
         %fitPlot = plot(fittedGaussians, 'r');
-        h = legend(fitPlot, '$a\cdot N(\mu_1, \sigma_1) + (1-a)\cdot N(\mu_2, \sigma_2)$');
-        set(h, 'Interpreter', 'LaTeX')
         title(['Delayline for channels ' num2str(channelGroups(k, 1)) ' and ' num2str(channelGroups(k, 2)) sprintf('. a = %.4f, b = %.4f, mu_1 = %.4f ns, mu_2 = %.4f ns, sigma_1 = %.4f ns, sigma_2 = %f ns', fittedGaussians.a1, fittedGaussians.a2, 1e9*fittedGaussians.b1, 1e9*fittedGaussians.b2, 1e9*fittedGaussians.c1, 1e9*fittedGaussians.c2)])
+        if compare
+            fittedGaussians = gaussianFits{2 + k};
+            fitPlot = plot(1e9*timeSumX{k}, fittedGaussians(timeSumX{k}), 'r');
+        end
     end
-    suptitle('Normalized histograms of time sums for the two delay lines')
+    suptitle('Time sums for the two delay lines')
 end
 
 %% Plot histograms for time differences and MCP hitmap
@@ -181,16 +240,16 @@ if plotPositions
     clf(figures.mcpHitmapPlot)
     set(gcf, 'Name', 'MCP 2D-plot')
     hold on
-    for k = 1:2
-        subplot(1, 2, k)
-        if k == 1
-            maskedTimeDiff = timeDiff(mask, :);
-            maskedTotalCharge = totalCharge(mask, :);
+    for l = 1:2
+        subplot(1, 2, l)
+        if l == 1
+            calcTimeDiff = maskedTimeDiff;
+            calcTotalCharge = maskedTotalCharge;
         else
-            maskedTimeDiff = timeMinDiff(allMask, :);
-            maskedTotalCharge = totalCharge(allMask, :);
+            calcTimeDiff = compareTimeDiff;
+            calcTotalCharge = compareTotalCharge;
         end
-        scatter(maskedTimeDiff(:, 1), maskedTimeDiff(:, 2), 4, sum(maskedTotalCharge, 2 ))
+        scatter(calcTimeDiff(:, 1), calcTimeDiff(:, 2), 4, sum(calcTotalCharge, 2 ))
         xlabel('$x\propto \Delta t_x$', 'Interpreter', 'LaTeX');
         ylabel('$y\propto \Delta t_y$', 'Interpreter', 'LaTeX');
         axis square
