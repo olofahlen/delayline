@@ -15,7 +15,6 @@ tic
 
 importSavedData = 1;
 saveData = 1;
-cutMeasurements = 50000;
 
 if importSavedData
     disp('Loading saved data...')
@@ -59,6 +58,7 @@ else
     end
 end
 
+cutMeasurements = 50000;
 if cutMeasurements
     data = data(1:cutMeasurements, :, :);
 end
@@ -69,12 +69,6 @@ plotFourierTransform = true;
 plotSignals = true;
 plotMeanPulse = true;
 plotFittedPeaks = true;
-
-%figures.offsetPlot = 11;
-%figures.fourierPlot = 12;
-%figures.fittedPeakPlot = 13;
-%figures.meanPulsePlot = 14;
-%figures.signalPlot = 15;
 
 chosenChannel = 1;
 chosenSignal = 1;
@@ -269,8 +263,24 @@ nbrOfMeas = size(data, 2);
 signals = signals(find(good == 1), :);
 signalIndices = signalIndices(find(good == 1), :);
 
-%% Locate peaks with bare minimum
+%% Locate peaks with bare minimum and calcualate minimum value
+signalVoltages = squeeze(min(data));
 minPeaks = T(signalIndices);
+
+%% Calculate skewness
+disp('Calculating skewness...')
+
+[minValues minIndices] = min(data);
+minIndices = squeeze(minIndices);
+
+signalSkewness = zeros(nbrOfMeas, channels);
+
+for i = 1:nbrOfMeas
+    for j = 1:channels
+        interval = minIndices(i, j) - nRiseTime : minIndices(i, j) + floor(1.1*nRiseTime);
+        signalSkewness(i, j) = skewness(data(interval, i, j));
+    end
+end
 
 %% Calculate charge
 
