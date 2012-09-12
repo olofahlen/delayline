@@ -37,6 +37,7 @@ figureNames = fieldnames(figures);
 formats = {'png', 'epsc', 'fig', 'pdf'};
 path = '/home/thorleif/mcp/tests/pics/';
 
+eval(['!rm ' path '*'])
 for k = 1:length(figureNames)
     figureName = figureNames{k};
     for l = 1:length(formats)

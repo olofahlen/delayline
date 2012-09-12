@@ -9,9 +9,13 @@ if importProcessedData
     load('processed96705')
 end
 
+compare = true;
+
 plotCharges = true;
 plotFdhm = true;
+plotPulseBroadening = true;
 plotTimeSums = true;
+plotDeltaTimeSum = true;
 plotPositions = true;
 plotCutHitmap = true;
 plotSkewness = true;
@@ -26,7 +30,6 @@ secondQuadrantMask = find(timeDiff(:, 1) < 0 & timeDiff(:, 2) > 0);
 shortFdhmMask = find(fdhm(:, 1) < 7.76e-9);
 skewBlobMask = find(-0.65 < signalSkewness(:, 1) & signalSkewness(:, 1) < -0.45 & -0.65 < signalSkewness(:, 2) & signalSkewness(:, 2) < -0.5);
 
-%skewLineMask = zeros(1, 1);
 upperCut = @(sn) (-0.446 - -0.2)/(-0.232 - -0.5)*(sn - -0.5) + -0.2;
 lowerCut = @(sn) (-0.529 - -0.3013)/(-0.395 - -0.581)*(sn - -0.581) + -0.3013;
 l = 1;
@@ -38,12 +41,51 @@ for i = 1:nbrOfMeas
         l = l + 1;
     end
 end
+skewLineMask = skewLineMask';
+
+%upperCut = @(x) (y2 - y1)/(x2 - x1)*(x - x1) + y1;
+rightTimeSumPeakMask = 0;
+upperCut = @(x) (103e-9 - 100.3e-9)/(99e-9 - 97e-9)*(x - 97e-9) + 100.3e-9;
+lowerCut = @(x) (102e-9 - 99e-9)/(101.3e-9 - 97.5e-9)*(x - 97.5e-9) + 99e-9;
+l = 1;
+for i = 1:nbrOfMeas
+    snx = timeSum(i, 1);
+    sny = timeSum(i, 2);
+    if sny < upperCut(snx) && lowerCut(snx) < sny && 97e-9 < snx && snx < 100.3e-9
+        rightTimeSumPeakMask(l, 1) = i;
+        l = l + 1;
+    end
+end
+
+%points = [96.4968 101.8809; 94.5421 99.9499]*1e-9;
+%p = polyfit(points(:, 1), points(:, 2), 1);
+%upperCut = @(x) p(1) + p(2)*x;
+leftTimeSumPeakMask = 0;
+points = [97.0138 101.5652; 95.0591 99.0998]*1e-9;
+p = polyfit(points(:, 1), points(:, 2), 1);
+lowerCut = @(x) p(2) + p(1)*x;
+upperCut = @(x) lowerCut(x) + 1.3e-9;
+l = 1;
+for i = 1:nbrOfMeas
+    snx = timeSum(i, 1);
+    sny= timeSum(i, 2);
+    if sny < upperCut(snx) && lowerCut(snx) < sny && 94.5e-9 < snx && snx < 97e-9
+        leftTimeSumPeakMask(l, 1) = i;
+        l = l + 1;
+    end
+end
+
+notThePeaksMask = setdiff(allMask, union(leftTimeSumPeakMask, rightTimeSumPeakMask));
 
 voltageMean = mean(signalVoltages(: ,1));
 voltageStd = std(signalVoltages(: ,1));
 lowPulseHeightMask = find(signalVoltages(:, 1) < voltageMean-voltageStd);
+singleLineMask = intersect(find(95.8e-9 < timeSum(:, 1) & timeSum(:, 1) < 96.3e-9 & 100.7e-9 < timeSum(:, 2) & timeSum(:, 2) < 101.5e-9), shortFdhmMask);
+firstTimeSumMask = find(95.75e-9 < timeSum(:, 1) & timeSum(:, 1) < 96.4e-9);
 
 mask = allMask;
+mask = leftTimeSumPeakMask;
+compareMask = rightTimeSumPeakMask;
 
 maskedCharge = charge(mask, :);
 maskedSignalSkewness = signalSkewness(mask, :);
@@ -51,10 +93,9 @@ maskedTotalCharge = totalCharge(mask, :);
 maskedGrandTotalCharge = grandTotalCharge(mask, :);
 maskedFdhm = fdhm(mask, :);
 maskedTimeSum = timeSum(mask, :);
+maskedDeltaTimeSum = deltaTimeSum(mask, :);
 maskedTimeDiff = timeDiff(mask, :);
 
-compare = false;
-compareMask = shortFdhmMask;
 intersectMask = intersect(mask, compareMask);
 
 compareCharge = charge(compareMask, :);
@@ -63,6 +104,10 @@ compareTotalCharge = totalCharge(compareMask, :);
 compareGrandTotalCharge = grandTotalCharge(compareMask, :);
 compareFdhm = fdhm(compareMask, :);
 compareTimeSum = timeSum(compareMask, :);
+%compareTimeSum = timeOvershootSum(compareMask, :);
+compareDeltaTimeSum = deltaTimeSum(compareMask, :);
+%compareDeltaTimeSum = deltaMinTimeSum(compareMask, :);
+%compareDeltaTimeSum = deltaOvershootTimeSum(compareMask, :);
 compareTimeDiff = timeDiff(compareMask, :);
 
 intersectCharge = charge(intersectMask, :);
@@ -71,6 +116,7 @@ intersectTotalCharge = totalCharge(intersectMask, :);
 intersectGrandTotalCharge = grandTotalCharge(intersectMask, :);
 intersectFdhm = fdhm(intersectMask, :);
 intersectTimeSum = timeSum(intersectMask, :);
+intersectDeltaTimeSum = deltaTimeSum(intersectMask, :);
 intersectTimeDiff = timeDiff(intersectMask, :);
 
 
@@ -195,7 +241,7 @@ end
 
 %% Plot histograms for FDHM
 if plotFdhm
-    disp('Plotting FDHM histograms...')
+    disp('Plotting FDHM histograms and scatter plot...')
     figures.fdhmHistPlot = figure(24);
     clf(figures.fdhmHistPlot)
     set(gcf, 'Name', 'FDHM of the four channels')
@@ -226,6 +272,47 @@ if plotFdhm
         axis 'auto y'
     end
     suptitle('Distribution of FDHM')
+
+    figures.fdhmScatterPlot = figure(212);
+    clf(figures.fdhmScatterPlot)
+    set(gcf, 'Name', 'FDHM Scatter Plot')
+    for k=1:2
+        subplot(1, 2, k)
+        hold on
+        title(num2str(channelGroups(k, :), 'FDHM for channels %d'))
+        xlabel('FDHM [ns]')
+        ylabel('FDHM [ns]')
+        scatter(1e9*maskedFdhm(:, channelGroups(k, 1)), 1e9*maskedFdhm(:, channelGroups(k, 2)), markerSize)
+        if compare
+            scatter(1e9*compareFdhm(:, channelGroups(k, 1)), 1e9*compareFdhm(:, channelGroups(k, 2)), markerSize, 'r')
+            scatter(1e9*intersectFdhm(:, channelGroups(k, 1)), 1e9*intersectFdhm(:, channelGroups(k, 2)), markerSize, 'm')
+        end
+        axis square
+    end
+    suptitle('Correlations for FDHM between readouts')
+end
+
+%% Create scatter plot timeDiff versus difference of FDHM
+
+if plotPulseBroadening
+    disp('Creating plot to show pulse broadening...')
+    figures.pulseBroadeningPlot = figure(213);
+    clf(figures.pulseBroadeningPlot)
+    hold on
+    set(gcf, 'Name', 'Pulse Broadening')
+    for k = 1:2
+        subplot(1, 2, k)
+        hold on
+        xlabel('Difference in FDHM [ns]')
+        ylabel('Time difference [ns]')
+        title(num2str(k, 'Correlations for delay line %d'))
+        scatter(1e9*diff(maskedFdhm(:, [channelGroups(k, 1) channelGroups(k, 2)]), 1, 2), 1e9*maskedTimeDiff(:, k), markerSize)
+        if compare
+            scatter(1e9*diff(compareFdhm(:, [channelGroups(k, 1) channelGroups(k, 2)]), 1, 2), 1e9*compareTimeDiff(:, k), markerSize, 'r')
+            scatter(1e9*diff(intersectFdhm(:, [channelGroups(k, 1) channelGroups(k, 2)]), 1, 2), 1e9*intersectTimeDiff(:, k), markerSize, 'm')
+        end
+    end
+    suptitle('Correlation for difference in FDHM and distance travelled (time difference) for pulses')
 end
 
 %%  Plot histograms for time sums and fit a double Gaussian
@@ -288,6 +375,7 @@ if plotTimeSums
         end
     end
     suptitle('Time sums for the delay lines')
+
     figures.timeSumScatterPlot = figure(29);
     clf(figures.timeSumScatterPlot)
     set(gcf, 'Name', 'Scatter plot of time sums')
@@ -301,6 +389,33 @@ if plotTimeSums
         scatter(1e9*intersectTimeSum(:, 1), 1e9*intersectTimeSum(:, 2), markerSize, 'm')
     end
     axis square
+end
+
+%% Plot difference of time sums
+if plotDeltaTimeSum
+    disp('Plotting differences of time sums...')
+    intMean = mean(deltaTimeSum);
+    intStd = std(deltaTimeSum);
+    limits = [intMean - nbrOfStd*intStd; intMean + nbrOfStd*intStd];
+    interval = linspace(limits(1, :), limits(2, :), bins);
+    figures.deltaTimeSumPlot = figure(211);
+    clf(figures.deltaTimeSumPlot)
+    set(gcf, 'Name', 'Differences of time sums')
+    hold on
+    title('Differences of the time sums')
+    xlabel('Delta Time Sum [ns]')
+    ylabel('Counts')
+    hist(1e9*maskedDeltaTimeSum, 1e9*interval)
+    xlim(1e9*[min(limits(1, :)) 1.03*max(limits(2, :))])
+    axis 'auto y'
+    if compare
+        h = findobj(gca, 'Type', 'patch');
+        set(h, 'FaceColor', 'b', 'EdgeColor', 'w', 'facealpha', 0.75)
+        hist(1e9*compareDeltaTimeSum, 1e9*interval)
+        newH = findobj(gca, 'Type', 'patch');
+        newH = newH(find(newH ~= h));
+        set(newH, 'FaceColor', 'r', 'EdgeColor', 'w', 'facealpha', 0.75)
+    end
 end
 
 %% Plot histograms for time differences and MCP hitmap
@@ -348,15 +463,19 @@ if plotPositions
             calcTimeDiff = compareTimeDiff;
             calcTotalCharge = compareTotalCharge;
         end
-        xlabel('$x\propto \Delta t_x$', 'Interpreter', 'LaTeX');
-        ylabel('$y\propto \Delta t_y$', 'Interpreter', 'LaTeX');
-        scatter(calcTimeDiff(:, 1), calcTimeDiff(:, 2), markerSize, sum(calcTotalCharge, 2 ))
+        xlabel('x [mm]');
+        ylabel('y [mm]');
+        speed = (80/140e-9); %mm/s
+        scatter(speed*calcTimeDiff(:, 1), speed*calcTimeDiff(:, 2), markerSize, sum(calcTotalCharge, 2 ))
+        pitch = 1; %mm
+        gridxy(-80:pitch:80, -80:pitch:80, 'Linestyle', ':')
         axis square
-        cb = colorbar;
-        ylabel(cb, 'Charge [e]')
+        %cb = colorbar;
+        %ylabel(cb, 'Charge [e]')
     end
     if compare
-        suptitle('Reconstruction of particle hits on the MCP')
+        %suptitle('Reconstruction of particle hits on the MCP')
+        1
     end
 end
 
@@ -366,7 +485,6 @@ if plotCutHitmap
     disp('Plotting time cut hitmap...')
     figures.timeCutHitmapPlot = figure(28);
     clf(figures.timeCutHitmapPlot)
-    hold on
     set(gcf, 'Name', 'MCP 2D-plot with time cuts')
 
     gaussians = gaussianFits{1};
@@ -375,20 +493,19 @@ if plotCutHitmap
     for l = 1:1+compare
         if compare
             subplot(1, 2, l)
-            hold on
         end
+        hold on
         if l == 1
-            title('Cut MCP hitmap')
+            title(['MCP Hitmap cut at ' num2str(cut) 's for channels ' num2str(channelGroups(1, 1)) ' and ' num2str(channelGroups(1, 2))])
             calcTimeDiff = maskedTimeDiff;
             calcTimeSum = maskedTimeSum;
         else
-            title('Cut MCP hitmap Compare')
+            title(['MCP Hitmap Compare cut at ' num2str(cut) 's for channels ' num2str(channelGroups(1, 1)) ' and ' num2str(channelGroups(1, 2))])
             calcTimeDiff = compareTimeDiff;
             calcTimeSum = compareTimeSum;
         end
         less = find(calcTimeSum(:, 1) < cut);
         more = find(calcTimeSum(:, 1) > cut);
-        title(['Cut at ' num2str(cut) 's for channels ' num2str(channelGroups(1, 1)) ' and ' num2str(channelGroups(1, 2))])
         scatter(calcTimeDiff(less, 1), calcTimeDiff(less, 2), markerSize, 'b')
         scatter(calcTimeDiff(more, 1), calcTimeDiff(more, 2), markerSize, 'r')
         xlabel('$x\propto \Delta t_x$', 'Interpreter', 'LaTeX');

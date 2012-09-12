@@ -1,10 +1,10 @@
 %% Initial
-disp('Starting data processing...')
-
 %Toolboxes: DSP, SIgnal Processing, Wavelet
 clear all
+close all
 clc
 tic
+disp('Starting data processing...')
 
 % This file loads waveforms (Time + Amplitude) saved by the WavePro7100
 % The variable 'path' below should be the absolute path to a folder
@@ -58,10 +58,11 @@ else
     end
 end
 
-cutMeasurements = 50000;
+cutMeasurements = 0;
 if cutMeasurements
-    data = data(1:cutMeasurements, :, :);
+    data = data(:, 1:cutMeasurements, :);
 end
+nbrOfMeas = size(data, 2);
 
 %% Settings
 plotOffsets = true;
@@ -267,6 +268,25 @@ signalIndices = signalIndices(find(good == 1), :);
 signalVoltages = squeeze(min(data));
 minPeaks = T(signalIndices);
 
+%% Locate invariant time point by overshoot
+disp('Calculating invariant time poin by high pass overshoot...')
+overshoot = filter([1-sc sc-1],[1 sc-1], data);
+[minValues minIndices] = min(overshoot);
+[maxValues maxIndices] = max(overshoot);
+minValues = squeeze(minValues);
+minIndices = squeeze(minIndices);
+maxValues = squeeze(maxValues);
+maxIndices = squeeze(maxIndices);
+
+signalCrossover = zeros(nbrOfMeas, channels);
+for i = 1:nbrOfMeas
+    for j = 1:channels
+        p = polyfit([minValues(i, j); maxValues(i, j)], [T(minIndices(i, j)); T(maxIndices(i, j))], 1);
+        signalCrossover(i, j) = p(2);
+    end
+end
+
+
 %% Calculate skewness
 disp('Calculating skewness...')
 
@@ -376,15 +396,24 @@ end
 
 disp('Calculating sums of times...')
 
-timeMinSum = [sum(minPeaks(:, channelGroups(1, :)), 2) sum(minPeaks(:, channelGroups(2, :)), 2)];
 timeSum = [sum(signals(:, channelGroups(1, :)), 2) sum(signals(:, channelGroups(2, :)), 2)];
+timeMinSum = [sum(minPeaks(:, channelGroups(1, :)), 2) sum(minPeaks(:, channelGroups(2, :)), 2)];
+timeOvershootSum = [sum(signalCrossover(:, channelGroups(1, :)), 2) sum(signalCrossover(:, channelGroups(2, :)), 2)];
+
+%% Calculate difference of time sums
+
+disp('Calculating difference of time sums...')
+deltaTimeSum = diff(timeSum, 1, 2);
+deltaMinTimeSum = diff(timeMinSum, 1, 2);
+deltaOvershootTimeSum = diff(timeOvershootSum, 1, 2);
 
 %% Calculate positions
 
 disp('Calculating differences of times...')
 
-timeMinDiff = -[diff(minPeaks(:, channelGroups(1, :)), 1, 2) diff(minPeaks(:, channelGroups(2, :)), 1, 2)];
 timeDiff = -[diff(signals(:, channelGroups(1, :)), 1, 2) diff(signals(:, channelGroups(2, :)), 1, 2)];
+timeMinDiff = -[diff(minPeaks(:, channelGroups(1, :)), 1, 2) diff(minPeaks(:, channelGroups(2, :)), 1, 2)];
+timeOvershootDiff = -[diff(signalCrossover(:, channelGroups(1, :)), 1, 2) diff(signalCrossover(:, channelGroups(2, :)), 1, 2)];
 %The minus sign above is arbitrary, only mirrors the image in the origin.
 
 %% Plot signals
